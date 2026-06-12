@@ -1,0 +1,92 @@
+# BITION
+
+## SYSTEM 
+### APPLE
+*.DS_Store
+._*
+### WINDOWS
+Thumbs.db
+
+## USER
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## ENVIRONMENT
+### VSCODE
+.vs
+.vscode
+.idea
+Generated\ Files/
+### CLAUDE
+.claude/*
+!.claude/agents
+!.claude/skills
+!.claude/hooks
+!.claude/CLAUDE.md
+!.claude/settings.json
+.superpowers
+.playwright*
+.taskkey
+### PAPERCLIP
+data/paperclip/postgres/
+data/paperclip/home/
+# data/paperclip/backup/ is tracked (DB dumps for cross-machine sync)
+### SYMCON
+.workspace
+.libraries
+.mock
+
+## DEVELOPMENT
+### BUILD
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+!/bin/
+!/bin/console
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+### CONFIG
+.env.local
+.env.local.php
+.env.*.local
+### TEST
+[Tt]est[-_\.]*[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+### BACKUP
+*.bak
+*.backup
+### BENCHMARK
+BenchmarkDotNet.Artifacts/
+### LINT
+StyleCopReport.xml
+### PHP
+/vendor/
+!/vendor/legion
+/vendor/bithome/vendor/
+!/vendor/bithome
+/vendor/bithome/vendor/
+.phpunit.result.cache
+.phpunit.cache/
+coverage-*.xml
+cov-*.xml
+### PYTHON
+__pycache__/
+*.pyc
+### SYMFONY
+/var/
+/config/reference.php
