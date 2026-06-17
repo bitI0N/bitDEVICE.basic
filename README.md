@@ -196,7 +196,7 @@ graph TD
 bitDEVICE/
 ├── library.json          — Library metadata (ID, author, version)
 ├── bitCONTROL/
-│   ├── module.json       — Module metadata (Prefix: BCC, Type: 3)
+│   ├── module.json       — Module metadata (Prefix: BIT, Type: 3)
 │   ├── module.php        — Main module class (IPSModuleStrict)
 │   ├── form.json         — Static base form (status codes only)
 │   ├── locale.json       — English → German translations
