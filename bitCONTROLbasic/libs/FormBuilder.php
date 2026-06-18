@@ -183,9 +183,9 @@ class FormBuilder
             ]);
         }
 
-        // License panel at the end of actions (below "Evaluate now")
+        // License status (read-only, managed by bitCONTROL License splitter)
         $form['actions'][] = ['type' => 'Label', 'caption' => '', 'separator' => true];
-        $form['actions'][] = self::buildLicensePanel();
+        $form['actions'][] = self::buildLicenseStatus();
 
         return $form;
     }
@@ -751,149 +751,22 @@ class FormBuilder
         ];
     }
 
-    private static function buildLicensePanel(): array
+    private static function buildLicenseStatus(): array
     {
-        $dataPath = dirname(__DIR__) . '/data';
-        require_once dirname(__DIR__) . '/libs/LicenseManager.php';
-        $lm = new LicenseManager($dataPath);
-        $status = $lm->getStatus();
-
-        $items = match ($status['state']) {
-            'active' => self::licenseActiveItems($status),
-            'grace' => self::licenseGraceItems($status),
-            'expired' => self::licenseExpiredItems(),
-            default => self::licenseCommunityItems(),
-        };
-
-        return [
-            'type' => 'ExpansionPanel',
-            'caption' => self::t('License'),
-            'expanded' => $status['state'] !== 'active',
-            'items' => $items,
-        ];
-    }
-
-    private static function licenseCommunityItems(): array
-    {
-        return [
-            [
+        $tier = ProLoader::tier();
+        if ($tier === 'community') {
+            return [
                 'type' => 'Label',
-                'caption' => self::t('Community Edition'),
-                'bold' => true,
-            ],
-            [
-                'type' => 'RowLayout',
-                'items' => [
-                    [
-                        'type' => 'ValidationTextBox',
-                        'name' => 'LicenseKey',
-                        'caption' => self::t('License Key'),
-                        'width' => '350px',
-                    ],
-                    [
-                        'type' => 'Button',
-                        'caption' => self::t('Activate'),
-                        'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);',
-                    ],
-                ],
-            ],
-            [
-                'type' => 'Label',
-                'caption' => self::t('Unlock Formula mode, unlimited triggers and rules, and more.'),
+                'caption' => self::t('License') . ': Community — ' . self::t('managed by bitCONTROL License instance'),
                 'italic' => true,
-            ],
-        ];
-    }
-
-    private static function licenseActiveItems(array $status): array
-    {
-        $caption = sprintf('%s — %s', ucfirst($status['tier']), self::t('active'));
-        $items = [
-            [
-                'type' => 'Label',
-                'caption' => $caption,
-                'bold' => true,
-                'color' => 0x00AA00,
-            ],
-            [
-                'type' => 'Label',
-                'caption' => sprintf('%s: %s', self::t('Licensed to'), $status['licensee'] ?? ''),
-            ],
-        ];
-
-        if (!empty($status['expires'])) {
-            $items[] = [
-                'type' => 'Label',
-                'caption' => sprintf('%s: %s', self::t('Updates until'), $status['expires']),
             ];
         }
 
-        $items[] = [
-            'type' => 'RowLayout',
-            'items' => [
-                [
-                    'type' => 'Button',
-                    'caption' => self::t('Check for Updates'),
-                    'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");',
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => self::t('Deactivate'),
-                    'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");',
-                ],
-            ],
-        ];
-
-        return $items;
-    }
-
-    private static function licenseGraceItems(array $status): array
-    {
-        $daysLeft = $status['daysLeft'] ?? 0;
         return [
-            [
-                'type' => 'Label',
-                'caption' => sprintf('%s (%d %s)', self::t('Grace Period'), $daysLeft, self::t('days remaining')),
-                'bold' => true,
-                'color' => 0xCC8800,
-            ],
-            [
-                'type' => 'Label',
-                'caption' => self::t('License server unreachable. Pro features remain active temporarily.'),
-            ],
-            [
-                'type' => 'Button',
-                'caption' => self::t('Retry Now'),
-                'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");',
-            ],
-        ];
-    }
-
-    private static function licenseExpiredItems(): array
-    {
-        return [
-            [
-                'type' => 'Label',
-                'caption' => self::t('License expired — running in Community mode'),
-                'bold' => true,
-                'color' => 0xCC0000,
-            ],
-            [
-                'type' => 'RowLayout',
-                'items' => [
-                    [
-                        'type' => 'ValidationTextBox',
-                        'name' => 'LicenseKey',
-                        'caption' => self::t('License Key'),
-                        'width' => '350px',
-                    ],
-                    [
-                        'type' => 'Button',
-                        'caption' => self::t('Activate'),
-                        'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);',
-                    ],
-                ],
-            ],
+            'type' => 'Label',
+            'caption' => sprintf('%s: %s ✓', self::t('License'), ucfirst($tier)),
+            'bold' => true,
+            'color' => 0x00AA00,
         ];
     }
 }

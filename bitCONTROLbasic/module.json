@@ -5,7 +5,7 @@
     "vendor": "bition",
     "url": "https://dev.azure.com/bitI0N/bitHOME/_git/bitDEVICE",
     "aliases": ["bitCONTROL"],
-    "parentRequirements": [],
+    "parentRequirements": ["{4F6CA9B1-1136-45AC-A71B-ACB7717D8503}"],
     "childRequirements": [],
     "implemented": [],
     "prefix": "BIT"

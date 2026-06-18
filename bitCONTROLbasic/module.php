@@ -177,15 +177,6 @@ class bitCONTROL extends IPSModuleStrict
     public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
-            case 'LicenseActivate':
-                $this->handleLicenseActivation((string)$Value);
-                break;
-            case 'LicenseDeactivate':
-                $this->handleLicenseDeactivation();
-                break;
-            case 'LicenseRefresh':
-                $this->handleLicenseRevalidation();
-                break;
             case 'Active':
                 $this->SetValue('Active', $Value);
                 IPS_SetProperty($this->InstanceID, 'Active', $Value);
@@ -204,7 +195,7 @@ class bitCONTROL extends IPSModuleStrict
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
 
-        ProLoader::boot(__DIR__ . '/data');
+        ProLoader::boot(__DIR__ . '/../bitCONTROLsplitter/data');
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
             0 => $this->evaluateRules(),
@@ -499,40 +490,6 @@ class bitCONTROL extends IPSModuleStrict
     {
         $this->SendDebug('Evaluate', sprintf('%s mode requires bitCONTROL %s', $mode, $tier), 0);
         return sprintf('%s mode unavailable', $mode);
-    }
-
-    private function handleLicenseActivation(string $key): void
-    {
-        require_once __DIR__ . '/libs/LicenseManager.php';
-        $lm = new LicenseManager(__DIR__ . '/data');
-        $result = $lm->activate($key, IPS_GetLicensee());
-        if ($result['success']) {
-            ProLoader::reset();
-            ProLoader::boot(__DIR__ . '/data');
-            IPS_ApplyChanges($this->InstanceID);
-        }
-        echo json_encode($result);
-    }
-
-    private function handleLicenseDeactivation(): void
-    {
-        require_once __DIR__ . '/libs/LicenseManager.php';
-        $lm = new LicenseManager(__DIR__ . '/data');
-        $lm->deactivate();
-        ProLoader::reset();
-        IPS_ApplyChanges($this->InstanceID);
-    }
-
-    private function handleLicenseRevalidation(): void
-    {
-        require_once __DIR__ . '/libs/LicenseManager.php';
-        $lm = new LicenseManager(__DIR__ . '/data');
-        $result = $lm->revalidate(IPS_GetLicensee());
-        if (!empty($result['update_available'])) {
-            ProLoader::reset();
-            ProLoader::boot(__DIR__ . '/data');
-        }
-        echo json_encode($result);
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
