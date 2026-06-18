@@ -19,8 +19,6 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
         $this->EnableAction('Active');
-
-        $this->RequireParent('{5E484BB3-4EA7-4DC4-AEAE-B341093B4984}');
     }
 
     public function ApplyChanges(): void
