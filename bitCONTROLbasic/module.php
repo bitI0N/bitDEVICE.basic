@@ -9,6 +9,7 @@ require_once __DIR__ . '/libs/TimingEvaluator.php';
 require_once __DIR__ . '/libs/RuleEvaluator.php';
 require_once __DIR__ . '/libs/TriggerManager.php';
 require_once __DIR__ . '/libs/FormBuilder.php';
+require_once __DIR__ . '/libs/ProLoader.php';
 
 class bitCONTROL extends IPSModuleStrict
 {
@@ -176,6 +177,15 @@ class bitCONTROL extends IPSModuleStrict
     public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
+            case 'LicenseActivate':
+                $this->handleLicenseActivation((string)$Value);
+                break;
+            case 'LicenseDeactivate':
+                $this->handleLicenseDeactivation();
+                break;
+            case 'LicenseRefresh':
+                $this->handleLicenseRevalidation();
+                break;
             case 'Active':
                 $this->SetValue('Active', $Value);
                 IPS_SetProperty($this->InstanceID, 'Active', $Value);
@@ -194,11 +204,12 @@ class bitCONTROL extends IPSModuleStrict
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
 
+        ProLoader::boot(__DIR__ . '/data');
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
             0 => $this->evaluateRules(),
-            1 => $this->evaluateFormulas($aliasMap),
-            2 => $this->evaluateExpert($aliasMap),
+            1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap) : $this->featureUnavailable('Formula', 'Plus'),
+            2 => ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro'),
             default => null,
         };
 
@@ -482,6 +493,46 @@ class bitCONTROL extends IPSModuleStrict
             $this->SetStatus(203);
             return 'Error: ' . $e->getMessage();
         }
+    }
+
+    private function featureUnavailable(string $mode, string $tier): ?string
+    {
+        $this->SendDebug('Evaluate', sprintf('%s mode requires bitCONTROL %s', $mode, $tier), 0);
+        return sprintf('%s mode unavailable', $mode);
+    }
+
+    private function handleLicenseActivation(string $key): void
+    {
+        require_once __DIR__ . '/libs/LicenseManager.php';
+        $lm = new LicenseManager(__DIR__ . '/data');
+        $result = $lm->activate($key, IPS_GetLicensee());
+        if ($result['success']) {
+            ProLoader::reset();
+            ProLoader::boot(__DIR__ . '/data');
+            IPS_ApplyChanges($this->InstanceID);
+        }
+        echo json_encode($result);
+    }
+
+    private function handleLicenseDeactivation(): void
+    {
+        require_once __DIR__ . '/libs/LicenseManager.php';
+        $lm = new LicenseManager(__DIR__ . '/data');
+        $lm->deactivate();
+        ProLoader::reset();
+        IPS_ApplyChanges($this->InstanceID);
+    }
+
+    private function handleLicenseRevalidation(): void
+    {
+        require_once __DIR__ . '/libs/LicenseManager.php';
+        $lm = new LicenseManager(__DIR__ . '/data');
+        $result = $lm->revalidate(IPS_GetLicensee());
+        if (!empty($result['update_available'])) {
+            ProLoader::reset();
+            ProLoader::boot(__DIR__ . '/data');
+        }
+        echo json_encode($result);
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
