@@ -136,6 +136,29 @@ class RuleEvaluator
         return true;
     }
 
+    public static function getMaxRules(): int
+    {
+        $limiter = ProLoader::get('limiter');
+        if ($limiter) {
+            return $limiter->getLimit('rules');
+        }
+        return self::getCommunityLimits()['rules'];
+    }
+
+    public static function isAtLimit(array $rules): bool
+    {
+        return count($rules) >= self::getMaxRules();
+    }
+
+    private static function getCommunityLimits(): array
+    {
+        static $limits = null;
+        if ($limits === null) {
+            $limits = json_decode(file_get_contents(__DIR__ . '/limits.json'), true);
+        }
+        return $limits;
+    }
+
     private function runActions(mixed $actions, string $context): void
     {
         if (is_string($actions)) {

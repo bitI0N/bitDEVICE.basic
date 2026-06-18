@@ -280,6 +280,30 @@ class TriggerManager
         return (int)$value;
     }
 
+    public function getMaxTriggers(): int
+    {
+        $limiter = ProLoader::get('limiter');
+        if ($limiter) {
+            return $limiter->getLimit('triggers');
+        }
+        return $this->getCommunityLimits()['triggers'];
+    }
+
+    public function isAtLimit(array $triggers): bool
+    {
+        $eventTriggers = array_filter($triggers, static fn(array $t) => ($t['type'] ?? 'event') === 'event');
+        return count($eventTriggers) >= $this->getMaxTriggers();
+    }
+
+    private function getCommunityLimits(): array
+    {
+        static $limits = null;
+        if ($limits === null) {
+            $limits = json_decode(file_get_contents(__DIR__ . '/limits.json'), true);
+        }
+        return $limits;
+    }
+
     private function applyEventConditions(int $eventID, mixed $conditionsData): void
     {
         if (is_string($conditionsData)) {
