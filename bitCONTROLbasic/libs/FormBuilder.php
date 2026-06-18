@@ -165,11 +165,28 @@ class FormBuilder
                 break;
         }
 
-        return [
+        $form = [
             'elements' => $elements,
             'actions'  => self::buildActions(),
             'status'   => self::buildStatus(),
         ];
+
+        // Extension hook for paid tier form elements
+        $formExt = ProLoader::get('formbuilder');
+        if ($formExt) {
+            $form = $formExt->extend($form, [
+                'mode' => $mode,
+                'triggers' => $allTriggers,
+                'rules' => $rules,
+                'formulaOutputs' => $formulaOutputs,
+                'expertOutputs' => $expertOutputs,
+            ]);
+        }
+
+        // License panel always at the end
+        $form['elements'][] = self::buildLicensePanel();
+
+        return $form;
     }
 
     private static function buildTriggerPanel(array $triggers, array $deactivatedByLimit = []): array
@@ -730,6 +747,152 @@ class FormBuilder
             ['code' => 203, 'icon' => 'error', 'caption' => 'Script syntax error'],
             ['code' => 204, 'icon' => 'error', 'caption' => 'Referenced variable not found'],
             ['code' => 205, 'icon' => 'error', 'caption' => 'Duplicate rule name'],
+        ];
+    }
+
+    private static function buildLicensePanel(): array
+    {
+        $dataPath = dirname(__DIR__) . '/data';
+        require_once dirname(__DIR__) . '/libs/LicenseManager.php';
+        $lm = new LicenseManager($dataPath);
+        $status = $lm->getStatus();
+
+        $items = match ($status['state']) {
+            'active' => self::licenseActiveItems($status),
+            'grace' => self::licenseGraceItems($status),
+            'expired' => self::licenseExpiredItems(),
+            default => self::licenseCommunityItems(),
+        };
+
+        return [
+            'type' => 'ExpansionPanel',
+            'caption' => self::t('License'),
+            'expanded' => $status['state'] !== 'active',
+            'items' => $items,
+        ];
+    }
+
+    private static function licenseCommunityItems(): array
+    {
+        return [
+            [
+                'type' => 'Label',
+                'caption' => self::t('Community Edition'),
+                'bold' => true,
+            ],
+            [
+                'type' => 'RowLayout',
+                'items' => [
+                    [
+                        'type' => 'ValidationTextBox',
+                        'name' => 'LicenseKey',
+                        'caption' => self::t('License Key'),
+                        'width' => '350px',
+                    ],
+                    [
+                        'type' => 'Button',
+                        'caption' => self::t('Activate'),
+                        'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);',
+                    ],
+                ],
+            ],
+            [
+                'type' => 'Label',
+                'caption' => self::t('Unlock Formula mode, unlimited triggers and rules, and more.'),
+                'italic' => true,
+            ],
+        ];
+    }
+
+    private static function licenseActiveItems(array $status): array
+    {
+        $caption = sprintf('%s — %s', ucfirst($status['tier']), self::t('active'));
+        $items = [
+            [
+                'type' => 'Label',
+                'caption' => $caption,
+                'bold' => true,
+                'color' => 0x00AA00,
+            ],
+            [
+                'type' => 'Label',
+                'caption' => sprintf('%s: %s', self::t('Licensed to'), $status['licensee'] ?? ''),
+            ],
+        ];
+
+        if (!empty($status['expires'])) {
+            $items[] = [
+                'type' => 'Label',
+                'caption' => sprintf('%s: %s', self::t('Updates until'), $status['expires']),
+            ];
+        }
+
+        $items[] = [
+            'type' => 'RowLayout',
+            'items' => [
+                [
+                    'type' => 'Button',
+                    'caption' => self::t('Check for Updates'),
+                    'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");',
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => self::t('Deactivate'),
+                    'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");',
+                ],
+            ],
+        ];
+
+        return $items;
+    }
+
+    private static function licenseGraceItems(array $status): array
+    {
+        $daysLeft = $status['daysLeft'] ?? 0;
+        return [
+            [
+                'type' => 'Label',
+                'caption' => sprintf('%s (%d %s)', self::t('Grace Period'), $daysLeft, self::t('days remaining')),
+                'bold' => true,
+                'color' => 0xCC8800,
+            ],
+            [
+                'type' => 'Label',
+                'caption' => self::t('License server unreachable. Pro features remain active temporarily.'),
+            ],
+            [
+                'type' => 'Button',
+                'caption' => self::t('Retry Now'),
+                'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");',
+            ],
+        ];
+    }
+
+    private static function licenseExpiredItems(): array
+    {
+        return [
+            [
+                'type' => 'Label',
+                'caption' => self::t('License expired — running in Community mode'),
+                'bold' => true,
+                'color' => 0xCC0000,
+            ],
+            [
+                'type' => 'RowLayout',
+                'items' => [
+                    [
+                        'type' => 'ValidationTextBox',
+                        'name' => 'LicenseKey',
+                        'caption' => self::t('License Key'),
+                        'width' => '350px',
+                    ],
+                    [
+                        'type' => 'Button',
+                        'caption' => self::t('Activate'),
+                        'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);',
+                    ],
+                ],
+            ],
         ];
     }
 }
