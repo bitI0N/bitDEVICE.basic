@@ -13,20 +13,37 @@ class bitCONTROLLicense extends IPSModuleStrict
     {
         parent::Create();
 
+        $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('LicenseKey', '');
         $this->RegisterTimer('LicenseRevalidation', 0, 'BIT_Revalidate($_IPS[\'TARGET\']);');
+
+        $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
+        $this->EnableAction('Active');
     }
 
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
+        if (!$this->ReadPropertyBoolean('Active')) {
+            $this->SetValue('Active', false);
+            $this->deactivatePro();
+            $this->SetStatus(104);
+            return;
+        }
+
+        $this->SetValue('Active', true);
         $this->bootLicense();
     }
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
+            case 'Active':
+                $this->SetValue('Active', $Value);
+                IPS_SetProperty($this->InstanceID, 'Active', $Value);
+                IPS_ApplyChanges($this->InstanceID);
+                break;
             case 'LicenseActivate':
                 $this->handleActivation((string)$Value);
                 break;
