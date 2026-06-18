@@ -82,6 +82,25 @@ class bitCONTROL extends IPSModuleStrict
             return;
         }
 
+        $eventTriggers = array_filter($triggers, static fn($t) => ($t['type'] ?? 'event') === 'event');
+        if (count($eventTriggers) > $triggerManager->getMaxTriggers()) {
+            $this->SetStatus(200);
+            $this->SendDebug('LimitCheck', 'Trigger limit exceeded', 0);
+            return;
+        }
+
+        if ($mode === 1 && !ProLoader::has('formula')) {
+            $this->SetStatus(202);
+            $this->SendDebug('LimitCheck', 'Formula mode requires Plus license', 0);
+            return;
+        }
+
+        if ($mode === 2 && !ProLoader::has('expert')) {
+            $this->SetStatus(203);
+            $this->SendDebug('LimitCheck', 'Expert mode requires Pro license', 0);
+            return;
+        }
+
         $outputs = $this->getAllOutputs($mode);
         $aliasErrors = AliasValidator::validateAll($triggers, $outputs);
         if (!empty($aliasErrors)) {
@@ -94,6 +113,11 @@ class bitCONTROL extends IPSModuleStrict
 
         if ($mode === 0) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+            if (count($rules) > RuleEvaluator::getMaxRules()) {
+                $this->SetStatus(205);
+                $this->SendDebug('LimitCheck', 'Rule limit exceeded', 0);
+                return;
+            }
             $ruleNames = [];
             foreach ($rules as $rule) {
                 $name = $rule['name'] ?? '';
@@ -304,9 +328,10 @@ class bitCONTROL extends IPSModuleStrict
     {
         $rules          = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('RuleEvaluation');
-        $skipHeatup     = $this->ReadPropertyBoolean('RuleSkipHeatup');
-        $skipCooldown   = $this->ReadPropertyBoolean('RuleSkipCooldown');
-        $skipInterval   = $this->ReadPropertyBoolean('RuleSkipInterval');
+        $hasTiming      = ProLoader::has('timing');
+        $skipHeatup     = $hasTiming && $this->ReadPropertyBoolean('RuleSkipHeatup');
+        $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipCooldown');
+        $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipInterval');
 
         $evaluator = new RuleEvaluator(
             $this->InstanceID,
@@ -323,9 +348,10 @@ class bitCONTROL extends IPSModuleStrict
     {
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('FormulaEvaluation');
-        $skipHeatup     = $this->ReadPropertyBoolean('FormulaSkipHeatup');
-        $skipCooldown   = $this->ReadPropertyBoolean('FormulaSkipCooldown');
-        $skipInterval   = $this->ReadPropertyBoolean('FormulaSkipInterval');
+        $hasTiming      = ProLoader::has('timing');
+        $skipHeatup     = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipHeatup');
+        $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipCooldown');
+        $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipInterval');
         $isFirstMatch   = $evaluationMode === 0;
 
         $timing = new TimingEvaluator(
