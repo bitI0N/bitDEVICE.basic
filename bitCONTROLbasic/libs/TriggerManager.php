@@ -291,8 +291,7 @@ class TriggerManager
 
     public function isAtLimit(array $triggers): bool
     {
-        $eventTriggers = array_filter($triggers, static fn(array $t) => ($t['type'] ?? 'event') === 'event');
-        return count($eventTriggers) >= $this->getMaxTriggers();
+        return count($triggers) >= $this->getMaxTriggers();
     }
 
     private function getCommunityLimits(): array

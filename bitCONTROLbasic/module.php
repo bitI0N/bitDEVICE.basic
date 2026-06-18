@@ -82,8 +82,7 @@ class bitCONTROL extends IPSModuleStrict
             return;
         }
 
-        $eventTriggers = array_filter($triggers, static fn($t) => ($t['type'] ?? 'event') === 'event');
-        if (count($eventTriggers) > $triggerManager->getMaxTriggers()) {
+        if (count($triggers) > $triggerManager->getMaxTriggers()) {
             $this->SetStatus(200);
             $this->SendDebug('LimitCheck', 'Trigger limit exceeded', 0);
             return;

@@ -254,8 +254,7 @@ class FormBuilder
 
         $triggerManager = new TriggerManager(0);
         $maxTriggers = $triggerManager->getMaxTriggers();
-        $eventTriggerCount = count(array_filter($triggers, static fn($t) => ($t['type'] ?? 'event') === 'event'));
-        $triggerAtLimit = $eventTriggerCount >= $maxTriggers;
+        $triggerAtLimit = count($triggers) >= $maxTriggers;
 
         $caption = self::t('Triggers') . ' (' . count($triggers) . ' ' . self::t('defined') . ')';
         if ($triggerAtLimit && !ProLoader::has('limiter')) {
