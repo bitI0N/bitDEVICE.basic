@@ -183,8 +183,9 @@ class FormBuilder
             ]);
         }
 
-        // License panel always at the end
-        $form['elements'][] = self::buildLicensePanel();
+        // License panel at the end of actions (below "Evaluate now")
+        $form['actions'][] = ['type' => 'Label', 'caption' => '', 'separator' => true];
+        $form['actions'][] = self::buildLicensePanel();
 
         return $form;
     }
