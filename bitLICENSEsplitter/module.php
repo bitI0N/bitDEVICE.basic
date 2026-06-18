@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bitCONTROLbasic/libs/ProLoader.php';
 require_once __DIR__ . '/libs/LicenseManager.php';
 
-class bitLICENSEsplitter extends IPSModuleStrict
+class bitCONTROLLicense extends IPSModuleStrict
 {
     private const REVALIDATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
