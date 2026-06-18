@@ -1,0 +1,27 @@
+{
+    "translations": {
+        "de": {
+            "Active": "Aktiv",
+            "Community Edition": "Community-Edition",
+            "Unlock Formula mode, unlimited triggers and rules, and more.": "Formelmodus, unbegrenzte Trigger und Regeln und mehr freischalten.",
+            "Licensed to:": "Lizenziert für:",
+            "Updates until:": "Updates bis:",
+            "Grace Period": "Übergangszeit",
+            "days remaining": "Tage verbleibend",
+            "License server unreachable. Features remain active temporarily.": "Lizenzserver nicht erreichbar. Funktionen bleiben vorübergehend aktiv.",
+            "License expired — running in Community mode": "Lizenz abgelaufen — Community-Modus aktiv",
+            "Check for Updates": "Nach Updates suchen",
+            "Deactivate": "Deaktivieren",
+            "Retry Now": "Jetzt erneut versuchen",
+            "License Key": "Lizenzschlüssel",
+            "Activate": "Aktivieren",
+            "Ready": "Bereit",
+            "Inactive": "Inaktiv",
+            "License expired": "Lizenz abgelaufen",
+            "Activation failed": "Aktivierung fehlgeschlagen",
+            "Server unreachable": "Server nicht erreichbar",
+            "Simulation": "Simulation",
+            "disabled": "deaktiviert"
+        }
+    }
+}

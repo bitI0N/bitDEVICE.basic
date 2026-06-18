@@ -1,0 +1,12 @@
+{
+    "id": "{83D8560C-3C50-4B3E-95DE-A68B06C41109}",
+    "name": "bitCONTROL",
+    "type": 3,
+    "vendor": "bition",
+    "url": "https://dev.azure.com/bitI0N/bitHOME/_git/bitDEVICE",
+    "aliases": ["bitCONTROL"],
+    "parentRequirements": ["{252BFA4C-8676-44D5-9F0D-3233B71AE99E}"],
+    "childRequirements": [],
+    "implemented": ["{BA5CCE78-CDBF-4E9E-AB27-819C7042770B}"],
+    "prefix": "BIT"
+}
