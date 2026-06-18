@@ -124,7 +124,8 @@
             "Formula (Plus)": "Formel (Plus)",
             "Expert (Pro)": "Experte (Pro)",
             "License": "Lizenz",
-            "managed by bitCONTROL License instance": "verwaltet durch bitCONTROL License Instanz"
+            "managed by bitCONTROL License instance": "verwaltet durch bitCONTROL License Instanz",
+            "max. %d — upgrade to Plus": "max. %d — Upgrade auf Plus"
         }
     }
 }

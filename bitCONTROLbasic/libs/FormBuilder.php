@@ -252,15 +252,25 @@ class FormBuilder
             $values[] = array_merge($trigger, ['rowColor' => $color, 'triggerStatus' => $status]);
         }
 
+        $triggerManager = new TriggerManager(0);
+        $maxTriggers = $triggerManager->getMaxTriggers();
+        $eventTriggerCount = count(array_filter($triggers, static fn($t) => ($t['type'] ?? 'event') === 'event'));
+        $triggerAtLimit = $eventTriggerCount >= $maxTriggers;
+
+        $caption = self::t('Triggers') . ' (' . count($triggers) . ' ' . self::t('defined') . ')';
+        if ($triggerAtLimit && !ProLoader::has('limiter')) {
+            $caption .= ' — ' . sprintf(self::t('max. %d — upgrade to Plus'), $maxTriggers);
+        }
+
         return [
             'type'     => 'ExpansionPanel',
-            'caption'  => self::t('Triggers') . ' (' . count($triggers) . ' ' . self::t('defined') . ')',
+            'caption'  => $caption,
             'expanded' => true,
             'items'    => [
                 [
                     'type'        => 'List',
                     'name'        => 'Triggers',
-                    'add'         => true,
+                    'add'         => !$triggerAtLimit,
                     'delete'      => true,
                     'changeOrder' => true,
                     'rowCount'    => 5,
@@ -462,12 +472,19 @@ class FormBuilder
             ]);
         }
 
+        $maxRules = RuleEvaluator::getMaxRules();
+        $ruleAtLimit = count($rules) >= $maxRules;
+        $rulesCaption = self::t('Rules');
+        if ($ruleAtLimit && !ProLoader::has('limiter')) {
+            $rulesCaption .= ' — ' . sprintf(self::t('max. %d — upgrade to Plus'), $maxRules);
+        }
+
         return [
             [
                 'type'        => 'List',
                 'name'        => 'Rules',
-                'caption'     => 'Rules',
-                'add'         => true,
+                'caption'     => $rulesCaption,
+                'add'         => !$ruleAtLimit,
                 'delete'      => true,
                 'changeOrder' => true,
                 'rowCount'    => 5,
