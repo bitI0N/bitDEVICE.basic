@@ -66,7 +66,10 @@ class bitCONTROLLicense extends IPSModuleStrict
         $lm = new LicenseManager($this->getDataPath());
         $status = $lm->getStatus();
 
-        $elements = $this->buildStatusElements($status);
+        $elements = [
+            ['type' => 'CheckBox', 'name' => 'Active', 'caption' => 'Active'],
+        ];
+        $elements = array_merge($elements, $this->buildStatusElements($status));
         $actions = $this->buildActions($status);
 
         return json_encode([
