@@ -657,29 +657,29 @@ class FormBuilder
             ['type' => 'ExpansionPanel', 'caption' => 'Conditions', 'expanded' => false, 'items' => [
                 ['type' => 'SelectCondition', 'name' => 'conditions', 'multi' => true, 'caption' => 'Conditions'],
                 ['type' => 'RowLayout', 'items' => [
-                    ['type' => 'NumberSpinner', 'name' => 'delaySeconds', 'caption' => 'Heatup', 'minimum' => 0],
-                    ['type' => 'Select', 'name' => 'delayUnit', 'caption' => ' ', 'options' => [
-                        ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                    ['type' => 'NumberSpinner', 'name' => 'delaySeconds', 'caption' => self::t('Heatup'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                    ['type' => 'Select', 'name' => 'delayUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                        ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
-                    ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => 'Reset on interruption'],
+                    ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption'), 'enabled' => ProLoader::has('timing')],
                 ]],
                 ['type' => 'RowLayout', 'items' => [
-                    ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => 'Cooldown', 'minimum' => 0],
-                    ['type' => 'Select', 'name' => 'cooldownUnit', 'caption' => ' ', 'options' => [
-                        ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                    ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                    ['type' => 'Select', 'name' => 'cooldownUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                        ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
-                    ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => 'Reset on reactivation'],
+                    ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation'), 'enabled' => ProLoader::has('timing')],
                 ]],
             ]],
             ['type' => 'SelectAction', 'name' => 'actions', 'multi' => true, 'caption' => 'Actions'],
-            ['type' => 'CheckBox', 'name' => 'fallbackEnabled', 'caption' => 'Fallback Actions',
+            ['type' => 'CheckBox', 'name' => 'fallbackEnabled', 'caption' => self::t('Fallback Actions'), 'enabled' => ProLoader::has('limiter'),
                 'onChange' => 'BIT_UIToggleFallbackActions($id, $fallbackEnabled);'],
             ['type' => 'SelectAction', 'name' => 'fallbackActions', 'multi' => true, 'caption' => ' ',
-                'visible' => $fallbackEnabled],
+                'visible' => $fallbackEnabled, 'enabled' => ProLoader::has('limiter')],
             ['type' => 'RowLayout', 'items' => [
-                ['type' => 'NumberSpinner', 'name' => 'intervalSeconds', 'caption' => 'Interval', 'minimum' => 0],
-                ['type' => 'Select', 'name' => 'intervalUnit', 'caption' => ' ', 'options' => [
-                    ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                ['type' => 'NumberSpinner', 'name' => 'intervalSeconds', 'caption' => self::t('Interval'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                ['type' => 'Select', 'name' => 'intervalUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                    ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                 ]],
             ]],
         ];
@@ -705,37 +705,37 @@ class FormBuilder
             ['type' => 'ExpansionPanel', 'caption' => 'Conditions', 'expanded' => false, 'items' => [
                 ['type' => 'SelectCondition', 'name' => 'conditions', 'multi' => true, 'caption' => 'Conditions'],
                 ['type' => 'RowLayout', 'items' => [
-                    ['type' => 'NumberSpinner', 'name' => 'delaySeconds', 'caption' => 'Heatup', 'minimum' => 0],
-                    ['type' => 'Select', 'name' => 'delayUnit', 'caption' => ' ', 'options' => [
-                        ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                    ['type' => 'NumberSpinner', 'name' => 'delaySeconds', 'caption' => self::t('Heatup'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                    ['type' => 'Select', 'name' => 'delayUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                        ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
-                    ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => 'Reset on interruption'],
+                    ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption'), 'enabled' => ProLoader::has('timing')],
                 ]],
                 ['type' => 'RowLayout', 'items' => [
-                    ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => 'Cooldown', 'minimum' => 0],
-                    ['type' => 'Select', 'name' => 'cooldownUnit', 'caption' => ' ', 'options' => [
-                        ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                    ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                    ['type' => 'Select', 'name' => 'cooldownUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                        ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
-                    ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => 'Reset on reactivation'],
+                    ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation'), 'enabled' => ProLoader::has('timing')],
                 ]],
             ]],
             ['type' => 'ValidationTextBox', 'name' => 'formula', 'caption' => 'Formula',
                 'validate' => '^.+$',
                 'onChange' => 'BIT_UIValidateFormulaField($id, $formula);'],
             ['type' => 'Label', 'name' => 'formulaError', 'caption' => '', 'foreground' => '0xFF0000'],
-            ['type' => 'CheckBox', 'name' => 'fallbackFormulaEnabled', 'caption' => 'Fallback Formula',
+            ['type' => 'CheckBox', 'name' => 'fallbackFormulaEnabled', 'caption' => self::t('Fallback Formula'), 'enabled' => ProLoader::has('limiter'),
                 'onChange' => 'BIT_UIToggleFallbackFormula($id, $fallbackFormulaEnabled);'],
             ['type' => 'ValidationTextBox', 'name' => 'fallbackFormula', 'caption' => ' ',
-                'visible' => $fallbackEnabled,
+                'visible' => $fallbackEnabled, 'enabled' => ProLoader::has('limiter'),
                 'onChange' => 'BIT_UIValidateFallbackFormulaField($id, $fallbackFormula);'],
             ['type' => 'Label', 'name' => 'fallbackFormulaError',
                 'caption' => $fallbackFormulaError,
                 'foreground' => '0xFF0000',
                 'visible' => $fallbackFormulaError !== ''],
             ['type' => 'RowLayout', 'items' => [
-                ['type' => 'NumberSpinner', 'name' => 'intervalSeconds', 'caption' => 'Interval', 'minimum' => 0],
-                ['type' => 'Select', 'name' => 'intervalUnit', 'caption' => ' ', 'options' => [
-                    ['caption' => 'Seconds', 'value' => 1], ['caption' => 'Minutes', 'value' => 60], ['caption' => 'Hours', 'value' => 3600],
+                ['type' => 'NumberSpinner', 'name' => 'intervalSeconds', 'caption' => self::t('Interval'), 'minimum' => 0, 'enabled' => ProLoader::has('timing')],
+                ['type' => 'Select', 'name' => 'intervalUnit', 'caption' => ' ', 'enabled' => ProLoader::has('timing'), 'options' => [
+                    ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                 ]],
             ]],
             ['type' => 'ExpansionPanel', 'caption' => 'Help & Examples', 'expanded' => false, 'items' => [

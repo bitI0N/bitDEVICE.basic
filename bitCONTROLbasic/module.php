@@ -341,7 +341,7 @@ class bitCONTROL extends IPSModuleStrict
             }
         );
 
-        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval);
+        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, $hasTiming, ProLoader::has('limiter'));
     }
 
     private function evaluateFormulas(array $aliasMap): ?string
@@ -388,8 +388,9 @@ class bitCONTROL extends IPSModuleStrict
 
             $conditions    = $output['conditions'] ?? '[]';
             $conditionsMet = ($conditions === '' || $conditions === '[]') ? true : (bool)IPS_IsConditionPassing($conditions);
-            $delaySeconds  = (int)($output['delaySeconds'] ?? 0) * (int)($output['delayUnit'] ?? 1);
-            $cooldownSeconds = (int)($output['cooldownSeconds'] ?? 0) * (int)($output['cooldownUnit'] ?? 1);
+            $hasTiming     = ProLoader::has('timing');
+            $delaySeconds  = $hasTiming ? (int)($output['delaySeconds'] ?? 0) * (int)($output['delayUnit'] ?? 1) : 0;
+            $cooldownSeconds = $hasTiming ? (int)($output['cooldownSeconds'] ?? 0) * (int)($output['cooldownUnit'] ?? 1) : 0;
             $heatupReset   = (bool)($output['heatupResetOnInterruption'] ?? true);
             $cooldownReset = (bool)($output['cooldownResetOnReactivation'] ?? true);
 
@@ -419,7 +420,7 @@ class bitCONTROL extends IPSModuleStrict
 
                 if ($cooldownStatus === 'expired') {
                     $timing->markInactive($stateKey);
-                    $fallbackFormula = !empty($output['fallbackFormulaEnabled']) ? ($output['fallbackFormula'] ?? '') : '';
+                    $fallbackFormula = (ProLoader::has('limiter') && !empty($output['fallbackFormulaEnabled'])) ? ($output['fallbackFormula'] ?? '') : '';
                     if ($fallbackFormula !== '' && $variableID > 0) {
                         $evalMap = array_merge($aliasMap, $computedOutputs);
                         if ($alias !== '' && IPS_VariableExists($variableID)) {
@@ -441,7 +442,7 @@ class bitCONTROL extends IPSModuleStrict
                 continue;
             }
 
-            $intervalSeconds = (int)($output['intervalSeconds'] ?? 0) * (int)($output['intervalUnit'] ?? 1);
+            $intervalSeconds = $hasTiming ? (int)($output['intervalSeconds'] ?? 0) * (int)($output['intervalUnit'] ?? 1) : 0;
             if (!$timing->checkInterval($stateKey, $intervalSeconds)) {
                 if ($isFirstMatch && !$skipInterval) {
                     break;

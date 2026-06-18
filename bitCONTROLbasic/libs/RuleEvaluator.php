@@ -13,7 +13,7 @@ class RuleEvaluator
         $this->timing = new TimingEvaluator($readState, $writeState);
     }
 
-    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false): ?string
+    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false, bool $timingEnabled = true, bool $fallbackEnabled = true): ?string
     {
         $isFirstMatch = $evaluationMode === 0;
 
@@ -30,7 +30,7 @@ class RuleEvaluator
             $cooldownReset = (bool)($rule['cooldownResetOnReactivation'] ?? true);
 
             if ($conditionsMet) {
-                $delaySeconds = (int)($rule['delaySeconds'] ?? 0) * (int)($rule['delayUnit'] ?? 1);
+                $delaySeconds = $timingEnabled ? (int)($rule['delaySeconds'] ?? 0) * (int)($rule['delayUnit'] ?? 1) : 0;
 
                 $heatupStatus = $this->timing->checkHeatup($stateKey, $delaySeconds);
                 if ($heatupStatus !== 'passed') {
@@ -41,7 +41,7 @@ class RuleEvaluator
                     continue;
                 }
 
-                $intervalSeconds = (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1);
+                $intervalSeconds = $timingEnabled ? (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1) : 0;
                 if (!$this->timing->checkInterval($stateKey, $intervalSeconds)) {
                     if ($isFirstMatch && !$skipInterval) {
                         return null;
@@ -61,7 +61,7 @@ class RuleEvaluator
             } else {
                 $this->timing->cancelHeatup($stateKey, $heatupReset);
 
-                $cooldownSeconds = (int)($rule['cooldownSeconds'] ?? 0) * (int)($rule['cooldownUnit'] ?? 1);
+                $cooldownSeconds = $timingEnabled ? (int)($rule['cooldownSeconds'] ?? 0) * (int)($rule['cooldownUnit'] ?? 1) : 0;
                 $cooldownStatus = $this->timing->checkCooldown($stateKey, $cooldownSeconds);
 
                 if ($cooldownStatus === 'started' || $cooldownStatus === 'active') {
@@ -77,7 +77,7 @@ class RuleEvaluator
 
                 if ($cooldownStatus === 'expired') {
                     $this->timing->markInactive($stateKey);
-                    if ($this->executeFallbackActions($rule)) {
+                    if ($fallbackEnabled && $this->executeFallbackActions($rule)) {
                         if ($isFirstMatch) {
                             return ($rule['name'] ?? '') . ' (fallback)';
                         }
