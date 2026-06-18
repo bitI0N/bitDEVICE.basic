@@ -500,9 +500,9 @@ class FormBuilder
                         ['caption' => 'Execute all matching rules', 'value' => 1],
                     ],
                     'onChange' => 'BIT_UIToggleRuleSkip($id, $RuleEvaluation);'],
-                ['type' => 'CheckBox', 'name' => 'RuleSkipHeatup', 'caption' => 'Skip heatup', 'visible' => $ruleEvaluation === 0],
-                ['type' => 'CheckBox', 'name' => 'RuleSkipCooldown', 'caption' => 'Skip cooldown', 'visible' => $ruleEvaluation === 0],
-                ['type' => 'CheckBox', 'name' => 'RuleSkipInterval', 'caption' => 'Skip interval', 'visible' => $ruleEvaluation === 0],
+                ['type' => 'CheckBox', 'name' => 'RuleSkipHeatup', 'caption' => self::t('Skip heatup'), 'visible' => $ruleEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'RuleSkipCooldown', 'caption' => self::t('Skip cooldown'), 'visible' => $ruleEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'RuleSkipInterval', 'caption' => self::t('Skip interval'), 'visible' => $ruleEvaluation === 0 && ProLoader::has('timing')],
             ]],
         ];
     }
@@ -603,9 +603,9 @@ class FormBuilder
                         ['caption' => 'Execute all matching formulas', 'value' => 1],
                     ],
                     'onChange' => 'BIT_UIToggleFormulaSkip($id, $FormulaEvaluation);'],
-                ['type' => 'CheckBox', 'name' => 'FormulaSkipHeatup', 'caption' => 'Skip heatup', 'visible' => $formulaEvaluation === 0],
-                ['type' => 'CheckBox', 'name' => 'FormulaSkipCooldown', 'caption' => 'Skip cooldown', 'visible' => $formulaEvaluation === 0],
-                ['type' => 'CheckBox', 'name' => 'FormulaSkipInterval', 'caption' => 'Skip interval', 'visible' => $formulaEvaluation === 0],
+                ['type' => 'CheckBox', 'name' => 'FormulaSkipHeatup', 'caption' => self::t('Skip heatup'), 'visible' => $formulaEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'FormulaSkipCooldown', 'caption' => self::t('Skip cooldown'), 'visible' => $formulaEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'FormulaSkipInterval', 'caption' => self::t('Skip interval'), 'visible' => $formulaEvaluation === 0 && ProLoader::has('timing')],
             ]],
         ];
     }
