@@ -83,19 +83,19 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         if (count($triggers) > $triggerManager->getMaxTriggers()) {
-            $this->SetStatus(200);
+            $this->SetStatus(206);
             $this->SendDebug('LimitCheck', 'Trigger limit exceeded', 0);
             return;
         }
 
         if ($mode === 1 && !ProLoader::has('formula')) {
-            $this->SetStatus(202);
+            $this->SetStatus(208);
             $this->SendDebug('LimitCheck', 'Formula mode requires Plus license', 0);
             return;
         }
 
         if ($mode === 2 && !ProLoader::has('expert')) {
-            $this->SetStatus(203);
+            $this->SetStatus(209);
             $this->SendDebug('LimitCheck', 'Expert mode requires Pro license', 0);
             return;
         }
@@ -113,7 +113,7 @@ class bitCONTROL extends IPSModuleStrict
         if ($mode === 0) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
             if (count($rules) > RuleEvaluator::getMaxRules()) {
-                $this->SetStatus(205);
+                $this->SetStatus(207);
                 $this->SendDebug('LimitCheck', 'Rule limit exceeded', 0);
                 return;
             }

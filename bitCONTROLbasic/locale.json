@@ -125,7 +125,12 @@
             "Expert (Pro)": "Experte (Pro)",
             "License": "Lizenz",
             "managed by bitCONTROL License instance": "verwaltet durch bitCONTROL License Instanz",
-            "max. %d — upgrade to Plus": "max. %d — Upgrade auf Plus"
+            "max. %d — upgrade to Plus": "max. %d — Upgrade auf Plus",
+            "Trigger limit exceeded": "Trigger-Limit überschritten",
+            "Rule limit exceeded": "Regel-Limit überschritten",
+            "Formula mode requires Plus license": "Formelmodus erfordert Plus-Lizenz",
+            "Expert mode requires Pro license": "Expertenmodus erfordert Pro-Lizenz",
+            "Duplicate rule name": "Regelname bereits vergeben"
         }
     }
 }
