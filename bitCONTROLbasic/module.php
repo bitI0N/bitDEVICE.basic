@@ -53,7 +53,7 @@ class bitCONTROL extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
-        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
+        $this->ensureProLoader();
 
         foreach ($this->GetMessageList() as $senderID => $messages) {
             foreach ($messages as $message) {
@@ -219,7 +219,7 @@ class bitCONTROL extends IPSModuleStrict
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
 
-        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
+        $this->ensureProLoader();
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
             0 => $this->evaluateRules(),
@@ -254,6 +254,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function ValidateFormula(string $formula): string
     {
+        $this->ensureProLoader();
         if (!ProLoader::has('formula')) {
             return 'Formula mode requires bitCONTROL Plus';
         }
@@ -284,6 +285,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function ValidateScript(string $script): string
     {
+        $this->ensureProLoader();
         if (!ProLoader::has('expert')) {
             return 'Expert mode requires bitCONTROL Pro';
         }
@@ -303,7 +305,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
+        $this->ensureProLoader();
         $mode = $this->ReadPropertyInteger('Mode');
         $triggers = $this->getAllTriggers();
         $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
@@ -529,6 +531,11 @@ class bitCONTROL extends IPSModuleStrict
         return sprintf('%s mode unavailable', $mode);
     }
 
+    private function ensureProLoader(): void
+    {
+        $this->ensureProLoader();
+    }
+
     public function UIGetTriggerPopupForm(mixed $row): array
     {
         $row         = json_decode(json_encode($row), true) ?? [];
@@ -695,6 +702,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function UIGetRulePopupForm(mixed $row): array
     {
+        $this->ensureProLoader();
         $row = json_decode(json_encode($row), true) ?? [];
         FormBuilder::setTranslator(fn(string $s) => $this->Translate($s));
         return FormBuilder::buildRulePopupForm($row);
@@ -702,6 +710,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function UIGetFormulaPopupForm(mixed $row): array
     {
+        $this->ensureProLoader();
         $row = json_decode(json_encode($row), true) ?? [];
         $triggers = $this->getAllTriggers();
         $triggerAliases = array_filter(array_column(
@@ -804,6 +813,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function UIValidateFormulaField(string $formula): void
     {
+        $this->ensureProLoader();
         $triggers = $this->getAllTriggers();
         $mode     = $this->ReadPropertyInteger('Mode');
         $outputs  = $this->getAllOutputs($mode);
@@ -819,6 +829,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function UIValidateFallbackFormulaField(string $formula): void
     {
+        $this->ensureProLoader();
         $triggers = $this->getAllTriggers();
         $mode     = $this->ReadPropertyInteger('Mode');
         $outputs  = $this->getAllOutputs($mode);
