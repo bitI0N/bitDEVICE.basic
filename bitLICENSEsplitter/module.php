@@ -89,7 +89,7 @@ class bitCONTROLLicense extends IPSModuleStrict
         ProLoader::reset();
 
         $this->SetSummary('Community');
-        $this->SetStatus(104);
+        $this->SetStatus(102);
         $this->SetTimerInterval('LicenseRevalidation', 0);
     }
 
