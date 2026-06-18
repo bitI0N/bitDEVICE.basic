@@ -775,6 +775,10 @@ class FormBuilder
             ['code' => 203, 'icon' => 'error', 'caption' => 'Script syntax error'],
             ['code' => 204, 'icon' => 'error', 'caption' => 'Referenced variable not found'],
             ['code' => 205, 'icon' => 'error', 'caption' => 'Duplicate rule name'],
+            ['code' => 206, 'icon' => 'error', 'caption' => 'Trigger limit exceeded'],
+            ['code' => 207, 'icon' => 'error', 'caption' => 'Rule limit exceeded'],
+            ['code' => 208, 'icon' => 'error', 'caption' => 'Formula mode requires Plus license'],
+            ['code' => 209, 'icon' => 'error', 'caption' => 'Expert mode requires Pro license'],
         ];
     }
 
