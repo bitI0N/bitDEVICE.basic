@@ -255,11 +255,8 @@ class FormBuilder
         $triggerManager = new TriggerManager(0);
         $maxTriggers = $triggerManager->getMaxTriggers();
         $triggerAtLimit = count($triggers) >= $maxTriggers;
-
-        $caption = self::t('Triggers') . ' (' . count($triggers) . ' ' . self::t('defined') . ')';
-        if ($triggerAtLimit && !ProLoader::has('limiter')) {
-            $caption .= ' — ' . sprintf(self::t('max. %d — upgrade to Plus'), $maxTriggers);
-        }
+        $maxDisplay = ProLoader::has('limiter') ? self::t('unlimited') : (string)$maxTriggers;
+        $caption = self::t('Triggers') . ' (' . count($triggers) . ' / ' . $maxDisplay . ')';
 
         return [
             'type'     => 'ExpansionPanel',
@@ -473,10 +470,8 @@ class FormBuilder
 
         $maxRules = RuleEvaluator::getMaxRules();
         $ruleAtLimit = count($rules) >= $maxRules;
-        $rulesCaption = self::t('Rules');
-        if ($ruleAtLimit && !ProLoader::has('limiter')) {
-            $rulesCaption .= ' — ' . sprintf(self::t('max. %d — upgrade to Plus'), $maxRules);
-        }
+        $maxRulesDisplay = ProLoader::has('limiter') ? self::t('unlimited') : (string)$maxRules;
+        $rulesCaption = self::t('Rules') . ' (' . count($rules) . ' / ' . $maxRulesDisplay . ')';
 
         return [
             [
@@ -786,11 +781,25 @@ class FormBuilder
     private static function buildLicenseStatus(): array
     {
         $tier = ProLoader::tier();
+
         if ($tier === 'community') {
             return [
-                'type' => 'Label',
-                'caption' => self::t('License') . ': Community — ' . self::t('managed by bitCONTROL License instance'),
-                'italic' => true,
+                'type' => 'ExpansionPanel',
+                'caption' => self::t('License') . ': Community',
+                'expanded' => false,
+                'items' => [
+                    ['type' => 'Label', 'caption' => self::t('managed by bitCONTROL License instance'), 'italic' => true],
+                    ['type' => 'Label', 'caption' => ''],
+                    ['type' => 'Label', 'caption' => self::t('Available with Plus:')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Unlimited triggers and rules')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Formula mode')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Heatup / Cooldown / Interval')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Fallback formulas and actions')],
+                    ['type' => 'Label', 'caption' => ''],
+                    ['type' => 'Label', 'caption' => self::t('Available with Pro:')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Expert mode (PHP scripting)')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Mode chaining')],
+                ],
             ];
         }
 
