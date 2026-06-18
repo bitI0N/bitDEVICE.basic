@@ -195,7 +195,7 @@ class bitCONTROL extends IPSModuleStrict
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
 
-        ProLoader::boot(__DIR__ . '/../bitCONTROLsplitter/data');
+        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
             0 => $this->evaluateRules(),
