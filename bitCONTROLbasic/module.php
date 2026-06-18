@@ -50,6 +50,8 @@ class bitCONTROL extends IPSModuleStrict
         $this->RegisterVariableInteger('LastEvaluation', $this->Translate('Last Evaluation'), '~UnixTimestamp', 2);
 
         $this->EnableAction('Active');
+
+        $this->RequireParent('{4F6CA9B1-1136-45AC-A71B-ACB7717D8503}');
     }
 
     public function ApplyChanges(): void

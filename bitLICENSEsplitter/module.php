@@ -19,6 +19,8 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
         $this->EnableAction('Active');
+
+        $this->RequireParent('{5E484BB3-4EA7-4DC4-AEAE-B341093B4984}');
     }
 
     public function ApplyChanges(): void
@@ -34,6 +36,18 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->SetValue('Active', true);
         $this->bootLicense();
+    }
+
+    public function ForwardData(string $JSONString): string
+    {
+        $data = json_decode($JSONString, true);
+        $action = $data['Action'] ?? '';
+
+        return match ($action) {
+            'GetTier' => json_encode(['tier' => ProLoader::tier()]),
+            'GetStatus' => json_encode((new LicenseManager($this->getDataPath()))->getStatus()),
+            default => json_encode(['error' => 'Unknown action']),
+        };
     }
 
     public function RequestAction(string $Ident, mixed $Value): void
@@ -79,6 +93,22 @@ class bitCONTROLLicense extends IPSModuleStrict
         ]);
     }
 
+    public function SendToIO(string $method, string $path, ?array $body = null): ?array
+    {
+        $response = $this->SendDataToParent(json_encode([
+            'DataID' => '{46976996-6BAD-4ACD-975E-FA555136520E}',
+            'Method' => $method,
+            'Path' => $path,
+            'Body' => $body,
+        ]));
+
+        if ($response === false || $response === '') {
+            return null;
+        }
+
+        return json_decode($response, true);
+    }
+
     private function bootLicense(): void
     {
         $lm = new LicenseManager($this->getDataPath());
@@ -115,7 +145,7 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function handleActivation(string $key): void
     {
-        $lm = new LicenseManager($this->getDataPath());
+        $lm = new LicenseManager($this->getDataPath(), fn(string $m, string $p, ?array $b) => $this->SendToIO($m, $p, $b));
         $result = $lm->activate($key, IPS_GetLicensee());
 
         if ($result['success']) {
@@ -132,7 +162,7 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function handleDeactivation(): void
     {
-        $lm = new LicenseManager($this->getDataPath());
+        $lm = new LicenseManager($this->getDataPath(), fn(string $m, string $p, ?array $b) => $this->SendToIO($m, $p, $b));
         $lm->deactivate();
 
         ProLoader::reset();
@@ -144,7 +174,7 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function handleRevalidation(): void
     {
-        $lm = new LicenseManager($this->getDataPath());
+        $lm = new LicenseManager($this->getDataPath(), fn(string $m, string $p, ?array $b) => $this->SendToIO($m, $p, $b));
         $result = $lm->revalidate(IPS_GetLicensee());
 
         if (isset($result['success']) && $result['success']) {

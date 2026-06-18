@@ -8,12 +8,16 @@ class LicenseManager
     private string $keysPath;
     private string $serverUrl = 'https://license.bition.com/api/v1';
 
+    /** @var callable(string $method, string $path, ?array $body): ?array */
+    private $httpTransport;
+
     private const GRACE_PERIOD_DAYS = 14;
 
-    public function __construct(string $dataPath)
+    public function __construct(string $dataPath, ?callable $httpTransport = null)
     {
         $this->dataPath = $dataPath;
         $this->keysPath = dirname($dataPath) . '/libs/keys';
+        $this->httpTransport = $httpTransport;
     }
 
     // -------------------------------------------------------------------------
@@ -426,6 +430,10 @@ class LicenseManager
      */
     private function httpPost(string $path, array $data): ?array
     {
+        if ($this->httpTransport) {
+            return ($this->httpTransport)('POST', $path, $data);
+        }
+
         $url     = $this->serverUrl . $path;
         $body    = json_encode($data);
         $context = stream_context_create([
@@ -451,13 +459,13 @@ class LicenseManager
         return is_array($decoded) ? $decoded : null;
     }
 
-    /**
-     * Perform an HTTP GET to download binary content (e.g. a ZIP file).
-     *
-     * @return string|null  Raw binary content or null on failure
-     */
     private function httpGet(string $url): ?string
     {
+        if ($this->httpTransport) {
+            $result = ($this->httpTransport)('GET', $url, null);
+            return is_string($result) ? $result : (is_array($result) ? json_encode($result) : null);
+        }
+
         $context = stream_context_create([
             'http' => [
                 'method'        => 'GET',
