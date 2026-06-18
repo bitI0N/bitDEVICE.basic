@@ -19,11 +19,7 @@
             "Inactive": "Inaktiv",
             "License expired": "Lizenz abgelaufen",
             "Activation failed": "Aktivierung fehlgeschlagen",
-            "Server unreachable": "Server nicht erreichbar",
-            "Simulation": "Simulation",
-            "Enable Simulation Mode": "Simulationsmodus aktivieren",
-            "Simulated Tier": "Simulierte Lizenzstufe",
-            "Simulation bypasses the license server and loads packages directly from source.": "Die Simulation umgeht den Lizenzserver und lädt Pakete direkt aus dem Quellcode."
+            "Server unreachable": "Server nicht erreichbar"
         }
     }
 }
