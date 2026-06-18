@@ -15,10 +15,16 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('LicenseKey', '');
+        $this->RegisterPropertyInteger('SimulationTier', 0);
         $this->RegisterTimer('LicenseRevalidation', 0, 'BIT_Revalidate($_IPS[\'TARGET\']);');
 
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
         $this->EnableAction('Active');
+    }
+
+    private function hasSimulator(): bool
+    {
+        return file_exists(__DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php');
     }
 
     public function ApplyChanges(): void
@@ -75,12 +81,20 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $lm = new LicenseManager($this->getDataPath());
-        $status = $lm->getStatus();
-
         $elements = [
             ['type' => 'CheckBox', 'name' => 'Active', 'caption' => $this->t('Active')],
         ];
+
+        if ($this->hasSimulator()) {
+            $elements[] = ['type' => 'Select', 'name' => 'SimulationTier', 'caption' => $this->t('Simulation'), 'options' => [
+                ['caption' => '— ' . $this->t('disabled') . ' —', 'value' => 0],
+                ['caption' => 'Plus', 'value' => 1],
+                ['caption' => 'Pro', 'value' => 2],
+            ]];
+        }
+
+        $lm = new LicenseManager($this->getDataPath());
+        $status = $lm->getStatus();
         $elements = array_merge($elements, $this->buildStatusElements($status));
         $actions = $this->buildActions($status);
 
@@ -94,6 +108,16 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function bootLicense(): void
     {
+        $simTier = $this->ReadPropertyInteger('SimulationTier');
+        if ($this->hasSimulator() && $simTier > 0) {
+            require_once __DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php';
+            SimulationProvider::boot($simTier);
+            $this->SetSummary(SimulationProvider::getTierName($simTier) . ' (Sim)');
+            $this->SetStatus(102);
+            $this->SetTimerInterval('LicenseRevalidation', 0);
+            return;
+        }
+
         $lm = new LicenseManager($this->getDataPath());
         $status = $lm->validate();
 

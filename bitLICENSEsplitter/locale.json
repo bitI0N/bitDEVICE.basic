@@ -19,7 +19,9 @@
             "Inactive": "Inaktiv",
             "License expired": "Lizenz abgelaufen",
             "Activation failed": "Aktivierung fehlgeschlagen",
-            "Server unreachable": "Server nicht erreichbar"
+            "Server unreachable": "Server nicht erreichbar",
+            "Simulation": "Simulation",
+            "disabled": "deaktiviert"
         }
     }
 }
