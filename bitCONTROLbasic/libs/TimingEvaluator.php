@@ -121,4 +121,10 @@ class TimingEvaluator
             }
         }
     }
+
+    public static function shouldSkipTiming(int $ruleIndex): bool
+    {
+        $timing = ProLoader::get('timing');
+        return $timing !== null && $timing->isSkippable($ruleIndex);
+    }
 }
