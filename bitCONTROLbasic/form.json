@@ -1,0 +1,41 @@
+{
+    "elements": [],
+    "actions": [],
+    "status": [
+        {
+            "code": 102,
+            "icon": "active",
+            "caption": "Module active"
+        },
+        {
+            "code": 104,
+            "icon": "inactive",
+            "caption": "Module inactive"
+        },
+        {
+            "code": 200,
+            "icon": "error",
+            "caption": "No triggers defined"
+        },
+        {
+            "code": 201,
+            "icon": "error",
+            "caption": "Invalid alias detected"
+        },
+        {
+            "code": 202,
+            "icon": "error",
+            "caption": "Formula syntax error"
+        },
+        {
+            "code": 203,
+            "icon": "error",
+            "caption": "Script syntax error"
+        },
+        {
+            "code": 204,
+            "icon": "error",
+            "caption": "Referenced variable not found"
+        }
+    ]
+}
