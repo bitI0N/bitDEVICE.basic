@@ -5,8 +5,8 @@
     "vendor": "bition",
     "url": "https://dev.azure.com/bitI0N/bitHOME/_git/bitDEVICE",
     "aliases": ["bitCONTROL License"],
-    "parentRequirements": ["{46976996-6BAD-4ACD-975E-FA555136520E}"],
-    "childRequirements": [],
+    "parentRequirements": [],
+    "childRequirements": ["{BA5CCE78-CDBF-4E9E-AB27-819C7042770B}"],
     "implemented": ["{252BFA4C-8676-44D5-9F0D-3233B71AE99E}"],
     "prefix": "BIT"
 }

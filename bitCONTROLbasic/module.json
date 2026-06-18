@@ -7,6 +7,6 @@
     "aliases": ["bitCONTROL"],
     "parentRequirements": ["{252BFA4C-8676-44D5-9F0D-3233B71AE99E}"],
     "childRequirements": [],
-    "implemented": [],
+    "implemented": ["{BA5CCE78-CDBF-4E9E-AB27-819C7042770B}"],
     "prefix": "BIT"
 }
