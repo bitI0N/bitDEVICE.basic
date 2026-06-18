@@ -15,6 +15,8 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('LicenseKey', '');
+        $this->RegisterPropertyBoolean('SimulationMode', false);
+        $this->RegisterPropertyInteger('SimulationTier', 0);
         $this->RegisterTimer('LicenseRevalidation', 0, 'BIT_Revalidate($_IPS[\'TARGET\']);');
 
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
@@ -75,14 +77,32 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $lm = new LicenseManager($this->getDataPath());
-        $status = $lm->getStatus();
+        $isSimulation = $this->ReadPropertyBoolean('SimulationMode');
 
         $elements = [
-            ['type' => 'CheckBox', 'name' => 'Active', 'caption' => 'Active'],
+            ['type' => 'CheckBox', 'name' => 'Active', 'caption' => $this->t('Active')],
+            ['type' => 'ExpansionPanel', 'caption' => $this->t('Simulation'), 'expanded' => $isSimulation, 'items' => [
+                ['type' => 'CheckBox', 'name' => 'SimulationMode', 'caption' => $this->t('Enable Simulation Mode')],
+                ['type' => 'Select', 'name' => 'SimulationTier', 'caption' => $this->t('Simulated Tier'), 'visible' => $isSimulation, 'options' => [
+                    ['caption' => 'Community', 'value' => 0],
+                    ['caption' => 'Plus', 'value' => 1],
+                    ['caption' => 'Pro', 'value' => 2],
+                ]],
+                ['type' => 'Label', 'caption' => $this->t('Simulation bypasses the license server and loads packages directly from source.'), 'visible' => $isSimulation, 'italic' => true],
+            ]],
         ];
-        $elements = array_merge($elements, $this->buildStatusElements($status));
-        $actions = $this->buildActions($status);
+
+        if (!$isSimulation) {
+            $lm = new LicenseManager($this->getDataPath());
+            $status = $lm->getStatus();
+            $elements = array_merge($elements, $this->buildStatusElements($status));
+            $actions = $this->buildActions($status);
+        } else {
+            $tierNames = [0 => 'Community', 1 => 'Plus', 2 => 'Pro'];
+            $simTier = $this->ReadPropertyInteger('SimulationTier');
+            $elements[] = ['type' => 'Label', 'caption' => sprintf('%s: %s (Simulation)', $this->t('License'), $tierNames[$simTier] ?? 'Community'), 'bold' => true, 'color' => 0x0066CC];
+            $actions = [];
+        }
 
         return json_encode([
             'elements' => $elements,
@@ -94,6 +114,11 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function bootLicense(): void
     {
+        if ($this->ReadPropertyBoolean('SimulationMode')) {
+            $this->bootSimulation();
+            return;
+        }
+
         $lm = new LicenseManager($this->getDataPath());
         $status = $lm->validate();
 
@@ -101,6 +126,35 @@ class bitCONTROLLicense extends IPSModuleStrict
             'active', 'grace' => $this->activatePro($status),
             default => $this->deactivatePro(),
         };
+    }
+
+    private function bootSimulation(): void
+    {
+        ProLoader::reset();
+
+        $tier = $this->ReadPropertyInteger('SimulationTier');
+        // 0 = Community, 1 = Plus, 2 = Pro
+
+        if ($tier >= 1) {
+            $plusPath = __DIR__ . '/../bitCONTROLplus/src';
+            require_once $plusPath . '/PlusFormulaEvaluator.php';
+            require_once $plusPath . '/PlusLimiter.php';
+            require_once $plusPath . '/PlusTimingExtension.php';
+            require_once $plusPath . '/PlusFormBuilder.php';
+        }
+
+        if ($tier >= 2) {
+            $proPath = __DIR__ . '/../bitCONTROLpro/src';
+            require_once $proPath . '/ProExpertEvaluator.php';
+            require_once $proPath . '/ProModeChainer.php';
+            require_once $proPath . '/ProFormBuilder.php';
+        }
+
+        $tierNames = [0 => 'Community', 1 => 'Plus', 2 => 'Pro'];
+        $this->SetSummary(($tierNames[$tier] ?? 'Community') . ' (Simulation)');
+        $this->SetStatus(102);
+        $this->SetTimerInterval('LicenseRevalidation', 0);
+        $this->SendDebug('License', 'Simulation mode: ' . ($tierNames[$tier] ?? 'Community'), 0);
     }
 
     private function activatePro(array $status): void
