@@ -53,7 +53,7 @@ class bitCONTROL extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
-        $this->ensureProLoader();
+
 
         foreach ($this->GetMessageList() as $senderID => $messages) {
             foreach ($messages as $message) {
@@ -72,6 +72,7 @@ class bitCONTROL extends IPSModuleStrict
             return;
         }
 
+        $this->ensureProLoader();
         $triggers = $this->getAllTriggers();
         $mode = $this->ReadPropertyInteger('Mode');
 
@@ -533,7 +534,7 @@ class bitCONTROL extends IPSModuleStrict
 
     private function ensureProLoader(): void
     {
-        $this->ensureProLoader();
+        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
