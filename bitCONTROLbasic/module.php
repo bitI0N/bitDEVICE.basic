@@ -2,14 +2,12 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/libs/ProLoader.php';
 require_once __DIR__ . '/libs/AliasValidator.php';
-require_once __DIR__ . '/libs/FormulaEvaluator.php';
-require_once __DIR__ . '/libs/ExpertEvaluator.php';
 require_once __DIR__ . '/libs/TimingEvaluator.php';
 require_once __DIR__ . '/libs/RuleEvaluator.php';
 require_once __DIR__ . '/libs/TriggerManager.php';
 require_once __DIR__ . '/libs/FormBuilder.php';
-require_once __DIR__ . '/libs/ProLoader.php';
 
 class bitCONTROL extends IPSModuleStrict
 {
@@ -55,6 +53,7 @@ class bitCONTROL extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
 
         foreach ($this->GetMessageList() as $senderID => $messages) {
             foreach ($messages as $message) {
@@ -109,14 +108,15 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        if ($mode === 1) {
+        if ($mode === 1 && ProLoader::has('formula')) {
+            $formulaProvider = ProLoader::get('formula');
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
             foreach ($formulaOutputs as $output) {
                 $formula = $output['formula'] ?? '';
                 if ($formula === '') {
                     continue;
                 }
-                $error = FormulaEvaluator::validate($formula, $allAliases);
+                $error = $formulaProvider->validate($formula, $allAliases);
                 if ($error !== '') {
                     $this->SetStatus(202);
                     $this->SendDebug('FormulaValidation', $error, 0);
@@ -124,7 +124,7 @@ class bitCONTROL extends IPSModuleStrict
                 }
                 $fallbackFormula = !empty($output['fallbackFormulaEnabled']) ? ($output['fallbackFormula'] ?? '') : '';
                 if ($fallbackFormula !== '') {
-                    $error = FormulaEvaluator::validate($fallbackFormula, $allAliases);
+                    $error = $formulaProvider->validate($fallbackFormula, $allAliases);
                     if ($error !== '') {
                         $this->SetStatus(202);
                         $this->SendDebug('FallbackFormulaValidation', $error, 0);
@@ -134,14 +134,15 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        if ($mode === 2) {
+        if ($mode === 2 && ProLoader::has('expert')) {
+            $expertProvider = ProLoader::get('expert');
             $script = $this->ReadPropertyString('ExpertScript');
             if ($script !== '') {
                 $outputAliases = array_filter(array_map(
                     static fn(array $o) => $o['alias'] ?? '',
                     $outputs
                 ), static fn(string $a) => $a !== '');
-                $error = ExpertEvaluator::validate($script, $outputAliases);
+                $error = $expertProvider->validate($script, $outputAliases);
                 if ($error !== '') {
                     $this->SetStatus(203);
                     $this->SendDebug('ExpertValidation', $error, 0);
@@ -230,10 +231,15 @@ class bitCONTROL extends IPSModuleStrict
 
     public function ValidateFormula(string $formula): string
     {
+        if (!ProLoader::has('formula')) {
+            return 'Formula mode requires bitCONTROL Plus';
+        }
+
         $triggers = $this->getAllTriggers();
         $mode = $this->ReadPropertyInteger('Mode');
         $outputs = $this->getAllOutputs($mode);
         $allAliases = $this->collectAllAliases($triggers, $outputs);
+        $provider = ProLoader::get('formula');
 
         if ($formula === '') {
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
@@ -242,7 +248,7 @@ class bitCONTROL extends IPSModuleStrict
                 if ($f === '') {
                     continue;
                 }
-                $error = FormulaEvaluator::validate($f, $allAliases);
+                $error = $provider->validate($f, $allAliases);
                 if ($error !== '') {
                     return $error;
                 }
@@ -250,11 +256,15 @@ class bitCONTROL extends IPSModuleStrict
             return '';
         }
 
-        return FormulaEvaluator::validate($formula, $allAliases);
+        return $provider->validate($formula, $allAliases);
     }
 
     public function ValidateScript(string $script): string
     {
+        if (!ProLoader::has('expert')) {
+            return 'Expert mode requires bitCONTROL Pro';
+        }
+
         if ($script === '') {
             $script = $this->ReadPropertyString('ExpertScript');
         }
@@ -265,11 +275,12 @@ class bitCONTROL extends IPSModuleStrict
             $outputs
         ), static fn(string $a) => $a !== '');
 
-        return ExpertEvaluator::validate($script, $outputAliases);
+        return ProLoader::get('expert')->validate($script, $outputAliases);
     }
 
     public function GetConfigurationForm(): string
     {
+        ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
         $mode = $this->ReadPropertyInteger('Mode');
         $triggers = $this->getAllTriggers();
         $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
@@ -389,7 +400,7 @@ class bitCONTROL extends IPSModuleStrict
                             $evalMap[$alias] = GetValue($variableID);
                         }
                         try {
-                            $fallbackResult = FormulaEvaluator::evaluate($fallbackFormula, $evalMap);
+                            $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
                             RequestAction($variableID, $fallbackResult);
                         } catch (\Throwable $e) {
                             IPS_LogMessage('bitCONTROL', sprintf(
@@ -418,7 +429,7 @@ class bitCONTROL extends IPSModuleStrict
                 $evalMap[$alias] = GetValue($variableID);
             }
 
-            $result = FormulaEvaluator::evaluate($formula, $evalMap);
+            $result = ProLoader::get('formula')->evaluate($formula, $evalMap);
             RequestAction($variableID, $result);
 
             if ($alias !== '') {
@@ -466,7 +477,7 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         try {
-            $results = ExpertEvaluator::execute($script, $aliasMap, $outputAliases);
+            $results = ProLoader::get('expert')->execute($script, $aliasMap, $outputAliases);
 
             foreach ($results as $alias => $value) {
                 if ($value !== null && isset($aliasToVariable[$alias])) {
@@ -772,7 +783,7 @@ class bitCONTROL extends IPSModuleStrict
         $outputs  = $this->getAllOutputs($mode);
         $allAliases = $this->collectAllAliases($triggers, $outputs);
 
-        $error    = $formula === '' ? '' : FormulaEvaluator::validate($formula, $allAliases);
+        $error    = $formula === '' ? '' : (ProLoader::has('formula') ? ProLoader::get('formula')->validate($formula, $allAliases) : 'Formula mode requires bitCONTROL Plus');
         $hasError = $error !== '';
 
         $this->UpdateFormField('formulaError', 'caption', $hasError ? $error : '');
@@ -787,7 +798,7 @@ class bitCONTROL extends IPSModuleStrict
         $outputs  = $this->getAllOutputs($mode);
         $allAliases = $this->collectAllAliases($triggers, $outputs);
 
-        $error    = $formula === '' ? '' : FormulaEvaluator::validate($formula, $allAliases);
+        $error    = $formula === '' ? '' : (ProLoader::has('formula') ? ProLoader::get('formula')->validate($formula, $allAliases) : 'Formula mode requires bitCONTROL Plus');
         $hasError = $error !== '';
 
         $this->UpdateFormField('fallbackFormulaError', 'caption', $hasError ? $error : '');

@@ -142,15 +142,23 @@ class FormBuilder
 
         $elements[] = self::buildTriggerPanel($allTriggers, $deactivatedByLimit);
 
+        $modeOptions = [['caption' => 'Rule', 'value' => 0]];
+        if (ProLoader::has('formula')) {
+            $modeOptions[] = ['caption' => 'Formula', 'value' => 1];
+        } else {
+            $modeOptions[] = ['caption' => 'Formula (Plus)', 'value' => 1];
+        }
+        if (ProLoader::has('expert')) {
+            $modeOptions[] = ['caption' => 'Expert', 'value' => 2];
+        } else {
+            $modeOptions[] = ['caption' => 'Expert (Pro)', 'value' => 2];
+        }
+
         $elements[] = [
             'type'    => 'Select',
             'name'    => 'Mode',
             'caption' => 'Steering Mode',
-            'options' => [
-                ['caption' => 'Rule', 'value' => 0],
-                ['caption' => 'Formula', 'value' => 1],
-                ['caption' => 'Expert', 'value' => 2],
-            ],
+            'options' => $modeOptions,
         ];
 
         switch ($mode) {
@@ -158,10 +166,18 @@ class FormBuilder
                 $elements = array_merge($elements, self::buildRuleElements($rules, $ruleEvaluation));
                 break;
             case 1:
-                $elements = array_merge($elements, self::buildFormulaElements($eventTriggers, $formulaOutputs, $formulaEvaluation));
+                if (ProLoader::has('formula')) {
+                    $elements = array_merge($elements, self::buildFormulaElements($eventTriggers, $formulaOutputs, $formulaEvaluation));
+                } else {
+                    $elements[] = ['type' => 'Label', 'caption' => self::t('Formula mode requires bitCONTROL Plus.'), 'bold' => true, 'color' => 0xCC8800];
+                }
                 break;
             case 2:
-                $elements = array_merge($elements, self::buildExpertElements($eventTriggers));
+                if (ProLoader::has('expert')) {
+                    $elements = array_merge($elements, self::buildExpertElements($eventTriggers));
+                } else {
+                    $elements[] = ['type' => 'Label', 'caption' => self::t('Expert mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
+                }
                 break;
         }
 
@@ -518,14 +534,14 @@ class FormBuilder
                 $status = self::t('Formula syntax error');
                 $color  = '#FFEECC';
             } else {
-                $error  = FormulaEvaluator::validate($formula, $allAliases);
+                $error  = ProLoader::get('formula')->validate($formula, $allAliases);
                 $status = $error === '' ? 'OK' : $error;
                 $color  = $error === '' ? '#FFFFFF' : '#FFCCCC';
 
                 if ($error === '' && !empty($output['fallbackFormulaEnabled'])) {
                     $fallbackFormula = $output['fallbackFormula'] ?? '';
                     if ($fallbackFormula !== '') {
-                        $fallbackError = FormulaEvaluator::validate($fallbackFormula, $allAliases);
+                        $fallbackError = ProLoader::get('formula')->validate($fallbackFormula, $allAliases);
                         if ($fallbackError !== '') {
                             $status = 'Fallback: ' . $fallbackError;
                             $color  = '#FFCCCC';
@@ -674,7 +690,7 @@ class FormBuilder
         $fallbackEnabled = !empty($row['fallbackFormulaEnabled']);
         $fallbackFormula = $row['fallbackFormula'] ?? '';
         $fallbackFormulaError = ($fallbackEnabled && $fallbackFormula !== '')
-            ? FormulaEvaluator::validate($fallbackFormula, array_merge(
+            ? ProLoader::get('formula')->validate($fallbackFormula, array_merge(
                 array_filter($triggerAliases),
                 array_filter([$row['alias'] ?? ''])
             ))
