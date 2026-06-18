@@ -178,6 +178,11 @@ class bitCONTROLLicense extends IPSModuleStrict
         return __DIR__ . '/data';
     }
 
+    private function t(string $s): string
+    {
+        return $this->Translate($s);
+    }
+
     private function buildStatusElements(array $status): array
     {
         $elements = [];
@@ -185,24 +190,24 @@ class bitCONTROLLicense extends IPSModuleStrict
         switch ($status['state']) {
             case 'active':
                 $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — active', ucfirst($status['tier'] ?? 'community')), 'bold' => true, 'color' => 0x00AA00];
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('Licensed to: %s', $status['licensee'] ?? '')];
+                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Licensed to:'), $status['licensee'] ?? '')];
                 if (!empty($status['expires'])) {
-                    $elements[] = ['type' => 'Label', 'caption' => sprintf('Updates until: %s', $status['expires'])];
+                    $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Updates until:'), $status['expires'])];
                 }
                 break;
 
             case 'grace':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('Grace Period — %d days remaining', $status['daysLeft'] ?? 0), 'bold' => true, 'color' => 0xCC8800];
-                $elements[] = ['type' => 'Label', 'caption' => 'License server unreachable. Features remain active temporarily.'];
+                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %d %s', $this->t('Grace Period'), $status['daysLeft'] ?? 0, $this->t('days remaining')), 'bold' => true, 'color' => 0xCC8800];
+                $elements[] = ['type' => 'Label', 'caption' => $this->t('License server unreachable. Features remain active temporarily.')];
                 break;
 
             case 'expired':
-                $elements[] = ['type' => 'Label', 'caption' => 'License expired — running in Community mode', 'bold' => true, 'color' => 0xCC0000];
+                $elements[] = ['type' => 'Label', 'caption' => $this->t('License expired — running in Community mode'), 'bold' => true, 'color' => 0xCC0000];
                 break;
 
             default:
-                $elements[] = ['type' => 'Label', 'caption' => 'Community Edition', 'bold' => true];
-                $elements[] = ['type' => 'Label', 'caption' => 'Unlock Formula mode, unlimited triggers and rules, and more.', 'italic' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->t('Community Edition'), 'bold' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->t('Unlock Formula mode, unlimited triggers and rules, and more.'), 'italic' => true];
                 break;
         }
 
@@ -215,15 +220,15 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         if ($status['state'] === 'active') {
             $actions[] = ['type' => 'RowLayout', 'items' => [
-                ['type' => 'Button', 'caption' => 'Check for Updates', 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'],
-                ['type' => 'Button', 'caption' => 'Deactivate', 'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Check for Updates'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Deactivate'), 'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");'],
             ]];
         } elseif ($status['state'] === 'grace') {
-            $actions[] = ['type' => 'Button', 'caption' => 'Retry Now', 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'];
+            $actions[] = ['type' => 'Button', 'caption' => $this->t('Retry Now'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'];
         } else {
             $actions[] = ['type' => 'RowLayout', 'items' => [
-                ['type' => 'ValidationTextBox', 'name' => 'LicenseKey', 'caption' => 'License Key', 'width' => '350px'],
-                ['type' => 'Button', 'caption' => 'Activate', 'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);'],
+                ['type' => 'ValidationTextBox', 'name' => 'LicenseKey', 'caption' => $this->t('License Key'), 'width' => '350px'],
+                ['type' => 'Button', 'caption' => $this->t('Activate'), 'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);'],
             ]];
         }
 

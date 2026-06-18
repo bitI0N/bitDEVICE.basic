@@ -118,7 +118,13 @@
             "Execution Limit": "Ausführungslimit",
             "Event Conditions": "Ereignisbedingungen",
             "limit reached": "Limit erreicht",
-            "Duplicate rule name": "Regelname bereits vergeben"
+            "Duplicate rule name": "Regelname bereits vergeben",
+            "Formula mode requires bitCONTROL Plus.": "Der Formelmodus erfordert bitCONTROL Plus.",
+            "Expert mode requires bitCONTROL Pro.": "Der Expertenmodus erfordert bitCONTROL Pro.",
+            "Formula (Plus)": "Formel (Plus)",
+            "Expert (Pro)": "Experte (Pro)",
+            "License": "Lizenz",
+            "managed by bitCONTROL License instance": "verwaltet durch bitCONTROL License Instanz"
         }
     }
 }
