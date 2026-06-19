@@ -65,7 +65,7 @@ class TriggerManager
                     $errors[] = sprintf('Trigger %d: Variable #%d does not exist', $i + 1, $variableID);
                 }
                 $eventType = $trigger['eventType'] ?? 1;
-                if (in_array($eventType, [2, 3, 4]) && empty($trigger['threshold'])) {
+                if (in_array($eventType, [2, 3, 4], true) && empty($trigger['threshold'])) {
                     $errors[] = sprintf('Trigger %d: Threshold required for this trigger type', $i + 1);
                 }
             }
@@ -120,7 +120,8 @@ class TriggerManager
         if ($eventID === false) {
             IPS_LogMessage('bitCONTROL', sprintf(
                 'Instance %d: Failed to create event trigger for variable #%d',
-                $this->instanceID, $variableID
+                $this->instanceID,
+                $variableID
             ));
             return;
         }
