@@ -430,7 +430,7 @@ class bitCONTROL extends IPSModuleStrict
                         }
                         try {
                             $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
-                            RequestAction($variableID, $fallbackResult);
+                            $this->writeOutput($variableID, $fallbackResult);
                         } catch (\Throwable $e) {
                             IPS_LogMessage('bitCONTROL', sprintf(
                                 'Instance %d: Fallback formula failed for "%s": %s',
@@ -459,7 +459,7 @@ class bitCONTROL extends IPSModuleStrict
             }
 
             $result = ProLoader::get('formula')->evaluate($formula, $evalMap);
-            RequestAction($variableID, $result);
+            $this->writeOutput($variableID, $result);
 
             if ($alias !== '') {
                 $computedOutputs[$alias] = $result;
@@ -510,7 +510,7 @@ class bitCONTROL extends IPSModuleStrict
 
             foreach ($results as $alias => $value) {
                 if ($value !== null && isset($aliasToVariable[$alias])) {
-                    RequestAction($aliasToVariable[$alias], $value);
+                    $this->writeOutput($aliasToVariable[$alias], $value);
                 }
             }
 
@@ -1026,5 +1026,15 @@ class bitCONTROL extends IPSModuleStrict
         $state = json_decode($this->ReadAttributeString('FormulaState'), true) ?: [];
         $state[$key] = $value;
         $this->WriteAttributeString('FormulaState', json_encode($state));
+    }
+
+    private function writeOutput(int $variableID, mixed $value): void
+    {
+        $var = IPS_GetVariable($variableID);
+        if ($var['VariableAction'] > 0 || $var['VariableCustomAction'] > 0) {
+            RequestAction($variableID, $value);
+        } else {
+            SetValue($variableID, $value);
+        }
     }
 }
