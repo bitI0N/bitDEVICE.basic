@@ -132,7 +132,7 @@ class TriggerManager
         IPS_SetHidden($eventID, true);
         IPS_SetEventTrigger($eventID, $eventType, $variableID);
 
-        if ($threshold !== null && $threshold !== '' && in_array($eventType, [2, 3, 4])) {
+        if ($threshold !== null && $threshold !== '' && in_array($eventType, [2, 3, 4], true)) {
             $varType = IPS_GetVariable($variableID)['VariableType'];
             $value = match ($varType) {
                 0 => (bool)$threshold,
@@ -144,7 +144,7 @@ class TriggerManager
         }
 
         $triggerRepeat = (int)($trigger['triggerRepeat'] ?? 0);
-        if (in_array($eventType, [2, 3, 4])) {
+        if (in_array($eventType, [2, 3, 4], true)) {
             IPS_SetEventTriggerSubsequentExecution($eventID, $triggerRepeat === 1);
         }
 
@@ -181,13 +181,27 @@ class TriggerManager
         $timeToSec    = $this->timeToSeconds($trigger['timeTo'] ?? 0);
 
         $weekdays = 0;
-        if (!empty($trigger['wdMon'])) $weekdays |= 1;
-        if (!empty($trigger['wdTue'])) $weekdays |= 2;
-        if (!empty($trigger['wdWed'])) $weekdays |= 4;
-        if (!empty($trigger['wdThu'])) $weekdays |= 8;
-        if (!empty($trigger['wdFri'])) $weekdays |= 16;
-        if (!empty($trigger['wdSat'])) $weekdays |= 32;
-        if (!empty($trigger['wdSun'])) $weekdays |= 64;
+        if (!empty($trigger['wdMon'])) {
+            $weekdays |= 1;
+        }
+        if (!empty($trigger['wdTue'])) {
+            $weekdays |= 2;
+        }
+        if (!empty($trigger['wdWed'])) {
+            $weekdays |= 4;
+        }
+        if (!empty($trigger['wdThu'])) {
+            $weekdays |= 8;
+        }
+        if (!empty($trigger['wdFri'])) {
+            $weekdays |= 16;
+        }
+        if (!empty($trigger['wdSat'])) {
+            $weekdays |= 32;
+        }
+        if (!empty($trigger['wdSun'])) {
+            $weekdays |= 64;
+        }
 
         $ipsTimeType     = $timePattern;
         $ipsTimeInterval = ($timePattern > 0) ? $timeInterval : 0;
