@@ -7,7 +7,9 @@ class ProLoader
     private static array $capabilities = [];
     private static bool $booted = false;
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     public static function boot(string $dataPath): void
     {

@@ -163,9 +163,9 @@ class bitCONTROL extends IPSModuleStrict
             $script = $this->ReadPropertyString('ExpertScript');
             if ($script !== '') {
                 $outputAliases = array_filter(array_map(
-                    static fn(array $o) => $o['alias'] ?? '',
+                    static fn (array $o) => $o['alias'] ?? '',
                     $outputs
-                ), static fn(string $a) => $a !== '');
+                ), static fn (string $a) => $a !== '');
                 $error = $expertProvider->validate($script, $outputAliases);
                 if ($error !== '') {
                     $this->SetStatus(203);
@@ -297,9 +297,9 @@ class bitCONTROL extends IPSModuleStrict
 
         $outputs = $this->getAllOutputs(2);
         $outputAliases = array_filter(array_map(
-            static fn(array $o) => $o['alias'] ?? '',
+            static fn (array $o) => $o['alias'] ?? '',
             $outputs
-        ), static fn(string $a) => $a !== '');
+        ), static fn (string $a) => $a !== '');
 
         return ProLoader::get('expert')->validate($script, $outputAliases);
     }
@@ -313,14 +313,14 @@ class bitCONTROL extends IPSModuleStrict
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $expertOutputs = json_decode($this->ReadPropertyString('ExpertOutputs'), true) ?: [];
 
-        $eventTriggers = array_values(array_filter($triggers, fn($t) => ($t['type'] ?? 'event') === 'event'));
+        $eventTriggers = array_values(array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'));
 
         $triggerManager = new TriggerManager($this->InstanceID);
         $deactivatedByLimit = $triggerManager->getDeactivatedByLimit();
 
         $formulaEvaluation = $this->ReadPropertyInteger('FormulaEvaluation');
         $ruleEvaluation    = $this->ReadPropertyInteger('RuleEvaluation');
-        FormBuilder::setTranslator(fn(string $s) => $this->Translate($s));
+        FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
         $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit);
 
         return json_encode($form);
@@ -337,7 +337,7 @@ class bitCONTROL extends IPSModuleStrict
 
         $evaluator = new RuleEvaluator(
             $this->InstanceID,
-            fn(string $key): int => $this->readRuleState($key),
+            fn (string $key): int => $this->readRuleState($key),
             function (string $key, int $value): void {
                 $this->writeRuleState($key, $value);
             }
@@ -357,7 +357,7 @@ class bitCONTROL extends IPSModuleStrict
         $isFirstMatch   = $evaluationMode === 0;
 
         $timing = new TimingEvaluator(
-            fn(string $key): int => $this->readFormulaState($key),
+            fn (string $key): int => $this->readFormulaState($key),
             function (string $key, int $value): void {
                 $this->writeFormulaState($key, $value);
             }
@@ -515,7 +515,7 @@ class bitCONTROL extends IPSModuleStrict
             }
 
             return !empty($results) ? implode(', ', array_map(
-                static fn(string $k, mixed $v) => $k . '=' . (is_scalar($v) ? (string)$v : json_encode($v)),
+                static fn (string $k, mixed $v) => $k . '=' . (is_scalar($v) ? (string)$v : json_encode($v)),
                 array_keys($results),
                 array_values($results)
             )) : 'executed';
@@ -688,7 +688,7 @@ class bitCONTROL extends IPSModuleStrict
         }
         unset($el);
 
-        usort($form, fn($a, $b) => ($b['visible'] ? 1 : 0) - ($a['visible'] ? 1 : 0));
+        usort($form, fn ($a, $b) => ($b['visible'] ? 1 : 0) - ($a['visible'] ? 1 : 0));
 
         return $form;
     }
@@ -705,7 +705,7 @@ class bitCONTROL extends IPSModuleStrict
     {
         $this->ensureProLoader();
         $row = json_decode(json_encode($row), true) ?? [];
-        FormBuilder::setTranslator(fn(string $s) => $this->Translate($s));
+        FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
         return FormBuilder::buildRulePopupForm($row);
     }
 
@@ -715,10 +715,10 @@ class bitCONTROL extends IPSModuleStrict
         $row = json_decode(json_encode($row), true) ?? [];
         $triggers = $this->getAllTriggers();
         $triggerAliases = array_filter(array_column(
-            array_filter($triggers, fn($t) => ($t['type'] ?? 'event') === 'event'),
+            array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
             'alias'
         ));
-        FormBuilder::setTranslator(fn(string $s) => $this->Translate($s));
+        FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
         return FormBuilder::buildFormulaPopupForm($row, $triggerAliases);
     }
 
@@ -803,7 +803,7 @@ class bitCONTROL extends IPSModuleStrict
                     $seenAliases[] = $alias;
                 }
             } else {
-                $status = FormBuilder::formatCyclicStatusTranslated($trigger, fn(string $s) => $this->Translate($s));
+                $status = FormBuilder::formatCyclicStatusTranslated($trigger, fn (string $s) => $this->Translate($s));
             }
 
             $values[] = array_merge($trigger, ['rowColor' => $color, 'triggerStatus' => $status]);
@@ -959,7 +959,7 @@ class bitCONTROL extends IPSModuleStrict
     {
         if ($mode === 0) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
-            $validKeys = array_map(fn($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules));
+            $validKeys = array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules));
             $state = json_decode($this->ReadAttributeString('RuleState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('RuleState', json_encode($pruned));

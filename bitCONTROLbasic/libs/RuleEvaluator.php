@@ -17,8 +17,8 @@ class RuleEvaluator
     {
         $isFirstMatch = $evaluationMode === 0;
 
-        $activeRules = array_filter($rules, static fn(array $rule) => !empty($rule['active']));
-        usort($activeRules, static fn(array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
+        $activeRules = array_filter($rules, static fn (array $rule) => !empty($rule['active']));
+        usort($activeRules, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
 
         $activeRuleName = null;
 
