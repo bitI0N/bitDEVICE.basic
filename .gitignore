@@ -80,10 +80,13 @@ StyleCopReport.xml
 /vendor/bithome/vendor/
 !/vendor/bithome
 /vendor/bithome/vendor/
+*.phar
 .phpunit.result.cache
 .phpunit.cache/
 coverage-*.xml
 cov-*.xml
+### PIPELINE ARTIFACTS
+build/dist/
 ### PYTHON
 __pycache__/
 *.pyc
