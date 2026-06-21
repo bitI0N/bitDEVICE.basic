@@ -865,31 +865,45 @@ class bitCONTROL extends IPSModuleStrict
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
 
         $form = [];
+        $data = [];
         if (str_starts_with($ref, 'rule:')) {
             $index = (int)substr($ref, 5);
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
-            $ruleData = $rules[$index] ?? [];
-            $form = FormBuilder::buildRulePopupForm($ruleData);
+            $data = $rules[$index] ?? [];
+            $form = FormBuilder::buildRulePopupForm($data);
         } elseif (str_starts_with($ref, 'formula:')) {
             $index = (int)substr($ref, 8);
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
-            $formulaData = $formulaOutputs[$index] ?? [];
+            $data = $formulaOutputs[$index] ?? [];
             $triggers = $this->getAllTriggers();
             $triggerAliases = array_filter(array_column(
                 array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
                 'alias'
             ));
-            $form = FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
+            $form = FormBuilder::buildFormulaPopupForm($data, $triggerAliases);
         }
 
+        $this->applyValuesAndDisable($form, $data);
+
+        return $form;
+    }
+
+    private function applyValuesAndDisable(array &$form, array $data): void
+    {
         foreach ($form as &$element) {
-            if (is_array($element)) {
-                $element['enabled'] = false;
+            if (!is_array($element)) {
+                continue;
+            }
+            $element['enabled'] = false;
+            $name = $element['name'] ?? '';
+            if ($name !== '' && array_key_exists($name, $data)) {
+                $element['value'] = $data[$name];
+            }
+            if (isset($element['items'])) {
+                $this->applyValuesAndDisable($element['items'], $data);
             }
         }
         unset($element);
-
-        return $form;
     }
 
     public function UIToggleFallbackActions(bool $enabled): void
