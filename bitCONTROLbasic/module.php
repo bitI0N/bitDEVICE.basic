@@ -863,6 +863,36 @@ class bitCONTROL extends IPSModuleStrict
         return FormBuilder::buildFormulaPopupForm($row, $triggerAliases);
     }
 
+    public function UIGetCombinedPopupForm(mixed $row): array
+    {
+        $this->ensureProLoader();
+        $row = json_decode(json_encode($row), true) ?? [];
+        $ref = $row['ref'] ?? '';
+
+        if (str_starts_with($ref, 'rule:')) {
+            $index = (int)substr($ref, 5);
+            $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+            $ruleData = $rules[$index] ?? [];
+            FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
+            return FormBuilder::buildRulePopupForm($ruleData);
+        }
+
+        if (str_starts_with($ref, 'formula:')) {
+            $index = (int)substr($ref, 8);
+            $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            $formulaData = $formulaOutputs[$index] ?? [];
+            $triggers = $this->getAllTriggers();
+            $triggerAliases = array_filter(array_column(
+                array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
+                'alias'
+            ));
+            FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
+            return FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
+        }
+
+        return [];
+    }
+
     public function UIToggleFallbackActions(bool $enabled): void
     {
         $this->UpdateFormField('fallbackActions', 'visible', $enabled);

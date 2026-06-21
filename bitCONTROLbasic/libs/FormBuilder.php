@@ -722,6 +722,7 @@ class FormBuilder
                 'changeOrder' => true,
                 'rowCount'    => 8,
                 'values'      => $values,
+                'form'        => ['return BIT_UIGetCombinedPopupForm($id, $CombinedOrder);'],
                 'columns'     => [
                     ['caption' => '#', 'name' => 'position', 'width' => '40px', 'add' => 0],
                     ['caption' => 'Type', 'name' => 'entryType', 'width' => '80px', 'add' => ''],
