@@ -611,7 +611,28 @@ class bitCONTROL extends IPSModuleStrict
 
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
 
-        if ($existingRefs === $refs) {
+        $needsSync = ($existingRefs !== $refs);
+
+        if (!$needsSync) {
+            foreach ($combinedOrder as $i => $entry) {
+                $ref = $entry['ref'] ?? '';
+                if (str_starts_with($ref, 'rule:')) {
+                    $index = (int)substr($ref, 5);
+                    if (isset($rules[$index]) && ($entry['name'] ?? '') !== ($rules[$index]['name'] ?? '')) {
+                        $needsSync = true;
+                        break;
+                    }
+                } elseif (str_starts_with($ref, 'formula:')) {
+                    $index = (int)substr($ref, 8);
+                    if (isset($formulaOutputs[$index]) && ($entry['alias'] ?? '') !== ($formulaOutputs[$index]['alias'] ?? '')) {
+                        $needsSync = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!$needsSync) {
             return;
         }
 
@@ -620,20 +641,20 @@ class bitCONTROL extends IPSModuleStrict
             [$type, $indexStr] = explode(':', $ref, 2);
             $index = (int)$indexStr;
             if ($type === 'rule' && isset($rules[$index])) {
-                $entryType = 'Rule';
-                $name = $rules[$index]['name'] ?? 'Rule ' . ($index + 1);
+                $newOrder[] = array_merge($rules[$index], [
+                    'position' => $i + 1,
+                    'entryType' => 'Rule',
+                    'entryName' => $rules[$index]['name'] ?? 'Rule ' . ($index + 1),
+                    'ref' => $ref,
+                ]);
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                $entryType = 'Formula';
-                $name = $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1);
-            } else {
-                continue;
+                $newOrder[] = array_merge($formulaOutputs[$index], [
+                    'position' => $i + 1,
+                    'entryType' => 'Formula',
+                    'entryName' => $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1),
+                    'ref' => $ref,
+                ]);
             }
-            $newOrder[] = [
-                'position' => $i + 1,
-                'entryType' => $entryType,
-                'entryName' => $name,
-                'ref' => $ref,
-            ];
         }
 
         IPS_SetProperty($this->InstanceID, 'CombinedOrder', json_encode($newOrder));
@@ -868,26 +889,19 @@ class bitCONTROL extends IPSModuleStrict
         $this->ensureProLoader();
         $row = json_decode(json_encode($row), true) ?? [];
         $ref = $row['ref'] ?? '';
+        FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
 
         if (str_starts_with($ref, 'rule:')) {
-            $index = (int)substr($ref, 5);
-            $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
-            $ruleData = $rules[$index] ?? [];
-            FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
-            return FormBuilder::buildRulePopupForm($ruleData);
+            return FormBuilder::buildRulePopupForm($row);
         }
 
         if (str_starts_with($ref, 'formula:')) {
-            $index = (int)substr($ref, 8);
-            $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
-            $formulaData = $formulaOutputs[$index] ?? [];
             $triggers = $this->getAllTriggers();
             $triggerAliases = array_filter(array_column(
                 array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
                 'alias'
             ));
-            FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
-            return FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
+            return FormBuilder::buildFormulaPopupForm($row, $triggerAliases);
         }
 
         return [];
