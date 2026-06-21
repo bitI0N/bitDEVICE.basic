@@ -148,15 +148,15 @@ class FormBuilder
         } else {
             $modeOptions[] = ['caption' => 'Formula (Plus)', 'value' => 1];
         }
-        if (ProLoader::has('expert')) {
-            $modeOptions[] = ['caption' => 'Expert', 'value' => 2];
-        } else {
-            $modeOptions[] = ['caption' => 'Expert (Pro)', 'value' => 2];
-        }
         if (ProLoader::has('combined')) {
             $modeOptions[] = ['caption' => 'Combined', 'value' => 3];
         } else {
             $modeOptions[] = ['caption' => 'Combined (Pro)', 'value' => 3];
+        }
+        if (ProLoader::has('expert')) {
+            $modeOptions[] = ['caption' => 'Expert', 'value' => 2];
+        } else {
+            $modeOptions[] = ['caption' => 'Expert (Pro)', 'value' => 2];
         }
 
         $elements[] = [
