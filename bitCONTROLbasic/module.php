@@ -634,20 +634,7 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        $existingRefs = [];
-        foreach ($combinedOrder as $entry) {
-            $r = is_array($entry) ? ($entry['ref'] ?? '') : '';
-            if ($r !== '') {
-                $existingRefs[] = $r;
-            }
-        }
-
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
-        $needsRewrite = ($existingRefs !== $refs) || $rulesChanged || $formulasChanged;
-
-        if (!$needsRewrite) {
-            return;
-        }
 
         $newOrder = [];
         foreach ($refs as $i => $ref) {
@@ -670,6 +657,12 @@ class bitCONTROL extends IPSModuleStrict
                     'active' => !empty($formulaOutputs[$index]['active']),
                 ];
             }
+        }
+
+        $needsRewrite = $rulesChanged || $formulasChanged || (json_encode($newOrder) !== json_encode($combinedOrder));
+
+        if (!$needsRewrite) {
+            return;
         }
 
         if ($rulesChanged) {
