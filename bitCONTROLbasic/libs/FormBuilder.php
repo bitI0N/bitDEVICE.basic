@@ -825,11 +825,11 @@ class FormBuilder
                 'form'        => ['return BIT_UIGetCombinedPopupForm($id, $CombinedOrder);'],
                 'columns'     => [
                     ['caption' => '#', 'name' => 'position', 'width' => '30px', 'add' => 0],
-                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true],
                     ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
                     ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
                     ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
-                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
+                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]'],
                     ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
