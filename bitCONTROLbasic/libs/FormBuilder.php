@@ -828,7 +828,7 @@ class FormBuilder
                     ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
                     ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
-                    ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
+                    ['caption' => self::t('Action') . ' / ' . self::t('Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
                     ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
                     ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
@@ -838,10 +838,10 @@ class FormBuilder
                 ],
             ],
             ['type' => 'RowLayout', 'items' => [
-                ['type' => 'Select', 'name' => 'CombinedEvaluation', 'caption' => 'Evaluation',
+                ['type' => 'Select', 'name' => 'CombinedEvaluation', 'caption' => self::t('Evaluation'),
                     'options' => [
-                        ['caption' => 'First match wins', 'value' => 0],
-                        ['caption' => 'Execute all matching', 'value' => 1],
+                        ['caption' => self::t('First match wins'), 'value' => 0],
+                        ['caption' => self::t('Execute all matching'), 'value' => 1],
                     ],
                     'onChange' => 'BIT_UIToggleCombinedSkip($id, $CombinedEvaluation);'],
                 ['type' => 'CheckBox', 'name' => 'CombinedSkipHeatup', 'caption' => self::t('Skip heatup'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
