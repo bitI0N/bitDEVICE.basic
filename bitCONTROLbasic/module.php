@@ -33,10 +33,16 @@ class bitCONTROL extends IPSModuleStrict
         $this->RegisterPropertyString('ExpertOutputs', '[]');
         $this->RegisterPropertyInteger('ExpertInterval', 0);
         $this->RegisterPropertyInteger('ExpertIntervalUnit', 1);
+        $this->RegisterPropertyString('CombinedOrder', '[]');
+        $this->RegisterPropertyInteger('CombinedEvaluation', 1);
+        $this->RegisterPropertyBoolean('CombinedSkipHeatup', false);
+        $this->RegisterPropertyBoolean('CombinedSkipCooldown', false);
+        $this->RegisterPropertyBoolean('CombinedSkipInterval', false);
 
         // Attributes
         $this->RegisterAttributeString('RuleState', '{}');
         $this->RegisterAttributeString('FormulaState', '{}');
+        $this->RegisterAttributeString('CombinedState', '{}');
         $this->RegisterAttributeString('ExpertLastRun', '0');
 
         // Timer
@@ -98,6 +104,12 @@ class bitCONTROL extends IPSModuleStrict
         if ($mode === 2 && !ProLoader::has('expert')) {
             $this->SetStatus(209);
             $this->SendDebug('LimitCheck', 'Expert mode requires Pro license', 0);
+            return;
+        }
+
+        if ($mode === 3 && !ProLoader::has('combined')) {
+            $this->SetStatus(210);
+            $this->SendDebug('LimitCheck', 'Combined mode requires Pro license', 0);
             return;
         }
 
@@ -193,7 +205,11 @@ class bitCONTROL extends IPSModuleStrict
 
         $this->pruneOrphanedState($mode);
 
-        $modeNames = [0 => 'Rule', 1 => 'Formula', 2 => 'Expert'];
+        if ($mode === 3) {
+            $this->syncCombinedOrder();
+        }
+
+        $modeNames = [0 => 'Rule', 1 => 'Formula', 2 => 'Expert', 3 => 'Combined'];
         $this->SetSummary($modeNames[$mode] ?? 'Unknown');
         $this->SetValue('Active', true);
         $this->SetStatus(102);
@@ -226,6 +242,7 @@ class bitCONTROL extends IPSModuleStrict
             0 => $this->evaluateRules(),
             1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap) : $this->featureUnavailable('Formula', 'Plus'),
             2 => ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro'),
+            3 => ProLoader::has('combined') ? $this->evaluateCombined($aliasMap) : $this->featureUnavailable('Combined', 'Pro'),
             default => null,
         };
 
@@ -243,7 +260,7 @@ class bitCONTROL extends IPSModuleStrict
 
     public function SetMode(int $mode): bool
     {
-        if ($mode < 0 || $mode > 2) {
+        if ($mode < 0 || $mode > 3) {
             return false;
         }
 
@@ -318,10 +335,12 @@ class bitCONTROL extends IPSModuleStrict
         $triggerManager = new TriggerManager($this->InstanceID);
         $deactivatedByLimit = $triggerManager->getDeactivatedByLimit();
 
-        $formulaEvaluation = $this->ReadPropertyInteger('FormulaEvaluation');
-        $ruleEvaluation    = $this->ReadPropertyInteger('RuleEvaluation');
+        $formulaEvaluation   = $this->ReadPropertyInteger('FormulaEvaluation');
+        $ruleEvaluation      = $this->ReadPropertyInteger('RuleEvaluation');
+        $combinedOrder       = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
+        $combinedEvaluation  = $this->ReadPropertyInteger('CombinedEvaluation');
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
-        $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit);
+        $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit, $combinedOrder, $combinedEvaluation);
 
         return json_encode($form);
     }
@@ -335,15 +354,19 @@ class bitCONTROL extends IPSModuleStrict
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipInterval');
 
-        $evaluator = new RuleEvaluator(
-            $this->InstanceID,
-            fn (string $key): int => $this->readRuleState($key),
-            function (string $key, int $value): void {
-                $this->writeRuleState($key, $value);
-            }
-        );
+        return $this->runRuleEvaluator($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'rule');
+    }
 
-        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, $hasTiming, ProLoader::has('limiter'));
+    private function runRuleEvaluator(array $rules, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    {
+        $readState = fn (string $key): int => $this->readState($stateSource, $key);
+        $writeState = function (string $key, int $value) use ($stateSource): void {
+            $this->writeState($stateSource, $key, $value);
+        };
+
+        $evaluator = new RuleEvaluator($this->InstanceID, $readState, $writeState);
+
+        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'));
     }
 
     private function evaluateFormulas(array $aliasMap): ?string
@@ -354,20 +377,23 @@ class bitCONTROL extends IPSModuleStrict
         $skipHeatup     = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipHeatup');
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipInterval');
-        $isFirstMatch   = $evaluationMode === 0;
+
+        return $this->runFormulaEvaluator($formulaOutputs, $aliasMap, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'formula');
+    }
+
+    private function runFormulaEvaluator(array $formulaOutputs, array $aliasMap, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    {
+        $isFirstMatch = $evaluationMode === 0;
 
         $timing = new TimingEvaluator(
-            fn (string $key): int => $this->readFormulaState($key),
-            function (string $key, int $value): void {
-                $this->writeFormulaState($key, $value);
+            fn (string $key): int => $this->readState($stateSource, $key),
+            function (string $key, int $value) use ($stateSource): void {
+                $this->writeState($stateSource, $key, $value);
             }
         );
 
         $results = [];
 
-        // Pre-populate all output aliases with their current variable values so
-        // formulas can reference other outputs even when those outputs are skipped
-        // this cycle due to heatup/cooldown/interval.
         $computedOutputs = [];
         foreach ($formulaOutputs as $output) {
             $alias      = $output['alias'] ?? '';
@@ -524,6 +550,115 @@ class bitCONTROL extends IPSModuleStrict
             $this->SetStatus(203);
             return 'Error: ' . $e->getMessage();
         }
+    }
+
+    private function evaluateCombined(array $aliasMap): ?string
+    {
+        $combinedOrder  = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
+        $evaluationMode = $this->ReadPropertyInteger('CombinedEvaluation');
+        $hasTiming      = ProLoader::has('timing');
+        $skipHeatup     = $hasTiming && $this->ReadPropertyBoolean('CombinedSkipHeatup');
+        $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('CombinedSkipCooldown');
+        $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('CombinedSkipInterval');
+        $isFirstMatch   = $evaluationMode === 0;
+
+        $rules          = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+        $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+
+        $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
+
+        $results = [];
+
+        foreach ($refs as $ref) {
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+
+            if ($type === 'rule' && isset($rules[$index])) {
+                $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                if ($result !== null) {
+                    $results[] = $result;
+                    if ($isFirstMatch) {
+                        break;
+                    }
+                }
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                if ($result !== null) {
+                    $results[] = $result;
+                    if ($isFirstMatch) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return !empty($results) ? implode(', ', $results) : null;
+    }
+
+    private function syncCombinedOrder(): void
+    {
+        $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+        $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+        $combinedOrder = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
+
+        $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
+
+        $newOrder = [];
+        foreach ($refs as $i => $ref) {
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+            if ($type === 'rule' && isset($rules[$index])) {
+                $newOrder[] = [
+                    'ref' => $ref,
+                    'position' => $i + 1,
+                    'entryType' => 'Rule',
+                    'entryName' => $rules[$index]['name'] ?? 'Rule ' . ($index + 1),
+                    'active' => !empty($rules[$index]['active']),
+                ];
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                $newOrder[] = [
+                    'ref' => $ref,
+                    'position' => $i + 1,
+                    'entryType' => 'Formula',
+                    'entryName' => $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1),
+                    'active' => !empty($formulaOutputs[$index]['active']),
+                ];
+            }
+        }
+
+        if (json_encode($newOrder) === json_encode($combinedOrder)) {
+            return;
+        }
+
+        IPS_SetProperty($this->InstanceID, 'CombinedOrder', json_encode($newOrder));
+        IPS_ApplyChanges($this->InstanceID);
+    }
+
+    private function resolveCombinedRefs(array $combinedOrder, array $rules, array $formulaOutputs): array
+    {
+        $refs = [];
+        foreach ($combinedOrder as $entry) {
+            $ref = is_array($entry) ? ($entry['ref'] ?? '') : (string)$entry;
+            if (is_string($ref) && str_contains($ref, ':')) {
+                $refs[] = $ref;
+            }
+        }
+
+        $allRefs = [];
+        foreach ($rules as $i => $rule) {
+            $allRefs[] = 'rule:' . $i;
+        }
+        foreach ($formulaOutputs as $i => $output) {
+            $allRefs[] = 'formula:' . $i;
+        }
+
+        foreach ($allRefs as $ref) {
+            if (!in_array($ref, $refs, true)) {
+                $refs[] = $ref;
+            }
+        }
+
+        return $refs;
     }
 
     private function featureUnavailable(string $mode, string $tier): ?string
@@ -722,6 +857,55 @@ class bitCONTROL extends IPSModuleStrict
         return FormBuilder::buildFormulaPopupForm($row, $triggerAliases);
     }
 
+    public function UIGetCombinedPopupForm(mixed $row): array
+    {
+        $this->ensureProLoader();
+        $row = json_decode(json_encode($row), true) ?? [];
+        $ref = $row['ref'] ?? '';
+        FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
+
+        $form = [];
+        $data = [];
+        if (str_starts_with($ref, 'rule:')) {
+            $index = (int)substr($ref, 5);
+            $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+            $data = $rules[$index] ?? [];
+            $form = FormBuilder::buildRulePopupForm($data);
+        } elseif (str_starts_with($ref, 'formula:')) {
+            $index = (int)substr($ref, 8);
+            $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            $data = $formulaOutputs[$index] ?? [];
+            $triggers = $this->getAllTriggers();
+            $triggerAliases = array_filter(array_column(
+                array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
+                'alias'
+            ));
+            $form = FormBuilder::buildFormulaPopupForm($data, $triggerAliases);
+        }
+
+        $this->applyValuesAndDisable($form, $data);
+
+        return $form;
+    }
+
+    private function applyValuesAndDisable(array &$form, array $data): void
+    {
+        foreach ($form as &$element) {
+            if (!is_array($element)) {
+                continue;
+            }
+            $element['enabled'] = false;
+            $name = $element['name'] ?? '';
+            if ($name !== '' && array_key_exists($name, $data)) {
+                $element['value'] = $data[$name];
+            }
+            if (isset($element['items'])) {
+                $this->applyValuesAndDisable($element['items'], $data);
+            }
+        }
+        unset($element);
+    }
+
     public function UIToggleFallbackActions(bool $enabled): void
     {
         $this->UpdateFormField('fallbackActions', 'visible', $enabled);
@@ -738,6 +922,14 @@ class bitCONTROL extends IPSModuleStrict
         $this->UpdateFormField('FormulaSkipHeatup', 'visible', $visible);
         $this->UpdateFormField('FormulaSkipCooldown', 'visible', $visible);
         $this->UpdateFormField('FormulaSkipInterval', 'visible', $visible);
+    }
+
+    public function UIToggleCombinedSkip(int $mode): void
+    {
+        $visible = $mode === 0;
+        $this->UpdateFormField('CombinedSkipHeatup', 'visible', $visible);
+        $this->UpdateFormField('CombinedSkipCooldown', 'visible', $visible);
+        $this->UpdateFormField('CombinedSkipInterval', 'visible', $visible);
     }
 
     public function UIToggleTriggerType(string $type): void
@@ -930,6 +1122,7 @@ class bitCONTROL extends IPSModuleStrict
         return match ($mode) {
             1 => json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [],
             2 => json_decode($this->ReadPropertyString('ExpertOutputs'), true) ?: [],
+            3 => json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [],
             default => [],
         };
     }
@@ -976,6 +1169,22 @@ class bitCONTROL extends IPSModuleStrict
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('FormulaState', json_encode($pruned));
         }
+
+        if ($mode === 3) {
+            $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+            $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            $validKeys = array_merge(
+                array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules)),
+                array_map(function ($o) {
+                    $alias = $o['alias'] ?? '';
+                    $variableID = $o['variableID'] ?? 0;
+                    return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
+                }, $formulaOutputs)
+            );
+            $state = json_decode($this->ReadAttributeString('CombinedState'), true) ?: [];
+            $pruned = $this->pruneStateKeys($state, $validKeys);
+            $this->WriteAttributeString('CombinedState', json_encode($pruned));
+        }
     }
 
     private function pruneStateKeys(array $state, array $validKeys): array
@@ -1002,36 +1211,35 @@ class bitCONTROL extends IPSModuleStrict
         return $pruned;
     }
 
-    private function readRuleState(string $key): int
+    private function readState(string $source, string $key): int
     {
-        $state = json_decode($this->ReadAttributeString('RuleState'), true) ?: [];
+        $attribute = match ($source) {
+            'rule' => 'RuleState',
+            'formula' => 'FormulaState',
+            'combined' => 'CombinedState',
+            default => 'RuleState',
+        };
+        $state = json_decode($this->ReadAttributeString($attribute), true) ?: [];
         return $state[$key] ?? 0;
     }
 
-    private function writeRuleState(string $key, int $value): void
+    private function writeState(string $source, string $key, int $value): void
     {
-        $state = json_decode($this->ReadAttributeString('RuleState'), true) ?: [];
+        $attribute = match ($source) {
+            'rule' => 'RuleState',
+            'formula' => 'FormulaState',
+            'combined' => 'CombinedState',
+            default => 'RuleState',
+        };
+        $state = json_decode($this->ReadAttributeString($attribute), true) ?: [];
         $state[$key] = $value;
-        $this->WriteAttributeString('RuleState', json_encode($state));
-    }
-
-    private function readFormulaState(string $key): int
-    {
-        $state = json_decode($this->ReadAttributeString('FormulaState'), true) ?: [];
-        return $state[$key] ?? 0;
-    }
-
-    private function writeFormulaState(string $key, int $value): void
-    {
-        $state = json_decode($this->ReadAttributeString('FormulaState'), true) ?: [];
-        $state[$key] = $value;
-        $this->WriteAttributeString('FormulaState', json_encode($state));
+        $this->WriteAttributeString($attribute, json_encode($state));
     }
 
     private function writeOutput(int $variableID, mixed $value): void
     {
         $var = IPS_GetVariable($variableID);
-        if ($var['VariableAction'] > 0 || $var['VariableCustomAction'] > 0) {
+        if ($var['VariableAction'] > 0 && $var['VariableCustomAction'] === 0) {
             RequestAction($variableID, $value);
         } else {
             SetValue($variableID, $value);

@@ -130,7 +130,7 @@ class FormBuilder
         return $day . ', ' . $time;
     }
 
-    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = []): array
+    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1): array
     {
         $elements = [];
 
@@ -147,6 +147,11 @@ class FormBuilder
             $modeOptions[] = ['caption' => 'Formula', 'value' => 1];
         } else {
             $modeOptions[] = ['caption' => 'Formula (Plus)', 'value' => 1];
+        }
+        if (ProLoader::has('combined')) {
+            $modeOptions[] = ['caption' => 'Combined', 'value' => 3];
+        } else {
+            $modeOptions[] = ['caption' => 'Combined (Pro)', 'value' => 3];
         }
         if (ProLoader::has('expert')) {
             $modeOptions[] = ['caption' => 'Expert', 'value' => 2];
@@ -177,6 +182,13 @@ class FormBuilder
                     $elements = array_merge($elements, self::buildExpertElements($eventTriggers));
                 } else {
                     $elements[] = ['type' => 'Label', 'caption' => self::t('Expert mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
+                }
+                break;
+            case 3:
+                if (ProLoader::has('combined')) {
+                    $elements = array_merge($elements, self::buildCombinedElements($rules, $formulaOutputs, $combinedOrder, $combinedEvaluation));
+                } else {
+                    $elements[] = ['type' => 'Label', 'caption' => self::t('Combined mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
                 }
                 break;
         }
@@ -447,6 +459,74 @@ class FormBuilder
         return $seconds . ' ' . ($labels[$unit] ?? 's');
     }
 
+    private static function formatRuleActionDisplay(array $rule): string
+    {
+        $actions = $rule['actions'] ?? '';
+        $hasActions = ($actions !== '' && $actions !== '{}' && $actions !== '[]');
+        $fallback = (!empty($rule['fallbackEnabled']) && ($rule['fallbackActions'] ?? '') !== '' && ($rule['fallbackActions'] ?? '') !== '{}');
+        if (!$hasActions && !$fallback) {
+            return '-';
+        }
+        $parts = [];
+        if ($hasActions) {
+            $parts[] = self::t('Action');
+        }
+        if ($fallback) {
+            $parts[] = '| ' . self::t('Fallback');
+        }
+        return implode(' ', $parts);
+    }
+
+    private static function formatFormulaActionDisplay(array $output): string
+    {
+        $formula = $output['formula'] ?? '';
+        if ($formula === '') {
+            return '-';
+        }
+        $display = $formula;
+        if (!empty($output['fallbackFormulaEnabled']) && ($output['fallbackFormula'] ?? '') !== '') {
+            $display .= ' | ' . $output['fallbackFormula'];
+        }
+        return $display;
+    }
+
+    private static function computeRuleStatus(array $rule): string
+    {
+        if (empty($rule['active'])) {
+            return self::t('Inactive');
+        }
+        $actions = $rule['actions'] ?? '';
+        if ($actions === '' || $actions === '{}' || $actions === '[]') {
+            return self::t('No action');
+        }
+        return 'OK';
+    }
+
+    private static function computeFormulaStatus(array $output, array $allAliases): string
+    {
+        if (empty($output['active'])) {
+            return self::t('Inactive');
+        }
+        $formula = $output['formula'] ?? '';
+        if ($formula === '') {
+            return self::t('No formula defined');
+        }
+        if (!ProLoader::has('formula')) {
+            return 'OK';
+        }
+        $error = ProLoader::get('formula')->validate($formula, $allAliases);
+        if ($error !== '') {
+            return $error;
+        }
+        if (!empty($output['fallbackFormulaEnabled']) && ($output['fallbackFormula'] ?? '') !== '') {
+            $fbError = ProLoader::get('formula')->validate($output['fallbackFormula'], $allAliases);
+            if ($fbError !== '') {
+                return 'Fallback: ' . $fbError;
+            }
+        }
+        return 'OK';
+    }
+
     private static function buildRuleElements(array $rules = [], int $ruleEvaluation = 1): array
     {
         $values    = [];
@@ -460,11 +540,16 @@ class FormBuilder
             if ($name !== '') {
                 $seenNames[] = $name;
             }
+            $status = self::computeRuleStatus($rule);
+            if ($name !== '' && in_array($name, array_slice($seenNames, 0, -1), true)) {
+                $status = self::t('Duplicate name');
+            }
             $values[] = array_merge($rule, [
                 'rowColor'        => $color,
                 'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
                 'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
                 'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
+                'ruleStatus'      => $status,
             ]);
         }
 
@@ -498,6 +583,7 @@ class FormBuilder
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => 'Cooldown', 'name' => 'cooldownDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => 'Interval', 'name' => 'intervalDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => 'Status', 'name' => 'ruleStatus', 'width' => '100px', 'add' => 'OK'],
                     ['caption' => 'Actions', 'name' => 'actions', 'width' => '0px', 'add' => '{}', 'visible' => false, 'edit' => ['type' => 'SelectAction', 'multi' => true]],
                     ['caption' => '', 'name' => 'fallbackEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'fallbackActions', 'width' => '0px', 'add' => '{}', 'visible' => false, 'edit' => ['type' => 'SelectAction', 'multi' => true]],
@@ -651,6 +737,100 @@ class FormBuilder
         ];
     }
 
+    private static function buildCombinedElements(array $rules, array $formulaOutputs, array $combinedOrder, int $combinedEvaluation): array
+    {
+        $allAliases = array_filter(array_merge(
+            array_column($rules, 'name'),
+            array_column($formulaOutputs, 'alias')
+        ));
+
+        $values = [];
+        foreach ($combinedOrder as $position => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $ref = $entry['ref'] ?? '';
+            if (!str_contains($ref, ':')) {
+                continue;
+            }
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+
+            if ($type === 'rule' && isset($rules[$index])) {
+                $rule = $rules[$index];
+                $ruleStatus = self::computeRuleStatus($rule);
+                $values[] = array_merge($entry, [
+                    'position'        => $position + 1,
+                    'entryType'       => self::t('Rule'),
+                    'entryName'       => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
+                    'active'          => !empty($rule['active']),
+                    'actionDisplay'   => self::formatRuleActionDisplay($rule),
+                    'conditionDisplay' => $rule['conditions'] ?? '[]',
+                    'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
+                    'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
+                    'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
+                    'statusDisplay'   => $ruleStatus,
+                    'rowColor'        => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
+                ]);
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                $output = $formulaOutputs[$index];
+                $status = self::computeFormulaStatus($output, $allAliases);
+                $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
+                $values[] = array_merge($entry, [
+                    'position'        => $position + 1,
+                    'entryType'       => self::t('Formula'),
+                    'entryName'       => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
+                    'active'          => !empty($output['active']),
+                    'actionDisplay'   => self::formatFormulaActionDisplay($output),
+                    'conditionDisplay' => $output['conditions'] ?? '[]',
+                    'delayDisplay'    => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
+                    'cooldownDisplay' => self::formatDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1)),
+                    'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
+                    'statusDisplay'   => $status,
+                    'rowColor'        => $color,
+                ]);
+            }
+        }
+
+        return [
+            [
+                'type'        => 'List',
+                'name'        => 'CombinedOrder',
+                'caption'     => self::t('Execution Order'),
+                'add'         => false,
+                'delete'      => false,
+                'changeOrder' => true,
+                'rowCount'    => 8,
+                'values'      => $values,
+                'form'        => ['return BIT_UIGetCombinedPopupForm($id, $CombinedOrder);'],
+                'columns'     => [
+                    ['caption' => '#', 'name' => 'position', 'width' => '30px', 'add' => 0],
+                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
+                    ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
+                    ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
+                    ['caption' => self::t('Condition'), 'name' => 'conditionDisplay', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
+                    ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => self::t('Status'), 'name' => 'statusDisplay', 'width' => '100px', 'add' => ''],
+                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false, 'edit' => ['type' => 'ValidationTextBox']],
+                ],
+            ],
+            ['type' => 'RowLayout', 'items' => [
+                ['type' => 'Select', 'name' => 'CombinedEvaluation', 'caption' => self::t('Evaluation'),
+                    'options' => [
+                        ['caption' => self::t('First match wins'), 'value' => 0],
+                        ['caption' => self::t('Execute all matching'), 'value' => 1],
+                    ],
+                    'onChange' => 'BIT_UIToggleCombinedSkip($id, $CombinedEvaluation);'],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipHeatup', 'caption' => self::t('Skip heatup'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipCooldown', 'caption' => self::t('Skip cooldown'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipInterval', 'caption' => self::t('Skip interval'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+            ]],
+        ];
+    }
+
     private static function buildActions(): array
     {
         return [
@@ -779,6 +959,7 @@ class FormBuilder
             ['code' => 207, 'icon' => 'error', 'caption' => 'Rule limit exceeded'],
             ['code' => 208, 'icon' => 'error', 'caption' => 'Formula mode requires Plus license'],
             ['code' => 209, 'icon' => 'error', 'caption' => 'Expert mode requires Pro license'],
+            ['code' => 210, 'icon' => 'error', 'caption' => 'Combined mode requires Pro license'],
         ];
     }
 
@@ -802,6 +983,7 @@ class FormBuilder
                     ['type' => 'Label', 'caption' => ''],
                     ['type' => 'Label', 'caption' => self::t('Available with Pro:')],
                     ['type' => 'Label', 'caption' => '• ' . self::t('Expert mode (PHP scripting)')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Combined mode (priority ordering)')],
                     ['type' => 'Label', 'caption' => '• ' . self::t('Mode chaining')],
                 ],
             ];

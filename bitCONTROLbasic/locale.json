@@ -138,7 +138,21 @@
             "Rule limit exceeded": "Regel-Limit überschritten",
             "Formula mode requires Plus license": "Formelmodus erfordert Plus-Lizenz",
             "Expert mode requires Pro license": "Expertenmodus erfordert Pro-Lizenz",
-            "Duplicate rule name": "Regelname bereits vergeben"
+            "Combined mode requires Pro license": "Combined-Modus erfordert Pro-Lizenz",
+            "Duplicate rule name": "Regelname bereits vergeben",
+            "Combined": "Combined",
+            "Combined (Pro)": "Combined (Pro)",
+            "Combined mode requires bitCONTROL Pro.": "Der Combined-Modus erfordert bitCONTROL Pro.",
+            "Combined mode (priority ordering)": "Combined-Modus (Prioritätsreihenfolge)",
+            "Execution Order": "Ausführungsreihenfolge",
+            "First match wins": "Erster Treffer gewinnt",
+            "Execute all matching": "Alle Treffer ausführen",
+            "Action": "Aktion",
+            "Fallback": "Fallback",
+            "Inactive": "Inaktiv",
+            "No action": "Keine Aktion",
+            "No formula defined": "Keine Formel definiert",
+            "Action / Formula": "Aktion / Formel"
         }
     }
 }
