@@ -759,7 +759,7 @@ class FormBuilder
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
-                $values[] = array_merge($entry, $rule, [
+                $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Rule'),
                     'entryName'       => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
@@ -776,7 +776,7 @@ class FormBuilder
                 $output = $formulaOutputs[$index];
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
-                $values[] = array_merge($entry, $output, [
+                $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Formula'),
                     'entryName'       => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),

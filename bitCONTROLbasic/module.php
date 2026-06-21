@@ -601,45 +601,6 @@ class bitCONTROL extends IPSModuleStrict
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $combinedOrder = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
 
-        $slimFields = ['ref', 'position', 'entryType', 'entryName', 'active'];
-        $ruleFields = ['name', 'active', 'conditions', 'actions', 'fallbackEnabled', 'fallbackActions', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
-        $formulaFields = ['active', 'alias', 'variableID', 'formula', 'conditions', 'fallbackFormulaEnabled', 'fallbackFormula', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
-
-        $rulesChanged = false;
-        $formulasChanged = false;
-
-        foreach ($combinedOrder as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-            $ref = $entry['ref'] ?? '';
-            if (!str_contains($ref, ':')) {
-                continue;
-            }
-            if (empty(array_diff(array_keys($entry), $slimFields))) {
-                continue;
-            }
-
-            [$type, $indexStr] = explode(':', $ref, 2);
-            $index = (int)$indexStr;
-
-            if ($type === 'rule' && isset($rules[$index])) {
-                foreach ($ruleFields as $field) {
-                    if (array_key_exists($field, $entry)) {
-                        $rules[$index][$field] = $entry[$field];
-                        $rulesChanged = true;
-                    }
-                }
-            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                foreach ($formulaFields as $field) {
-                    if (array_key_exists($field, $entry)) {
-                        $formulaOutputs[$index][$field] = $entry[$field];
-                        $formulasChanged = true;
-                    }
-                }
-            }
-        }
-
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
 
         $newOrder = [];
@@ -665,18 +626,10 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        $needsRewrite = $rulesChanged || $formulasChanged || (json_encode($newOrder) !== json_encode($combinedOrder));
-
-        if (!$needsRewrite) {
+        if (json_encode($newOrder) === json_encode($combinedOrder)) {
             return;
         }
 
-        if ($rulesChanged) {
-            IPS_SetProperty($this->InstanceID, 'Rules', json_encode($rules));
-        }
-        if ($formulasChanged) {
-            IPS_SetProperty($this->InstanceID, 'FormulaOutputs', json_encode($formulaOutputs));
-        }
         IPS_SetProperty($this->InstanceID, 'CombinedOrder', json_encode($newOrder));
         IPS_ApplyChanges($this->InstanceID);
     }
@@ -911,14 +864,13 @@ class bitCONTROL extends IPSModuleStrict
         $ref = $row['ref'] ?? '';
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
 
+        $form = [];
         if (str_starts_with($ref, 'rule:')) {
             $index = (int)substr($ref, 5);
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
             $ruleData = $rules[$index] ?? [];
-            return FormBuilder::buildRulePopupForm($ruleData);
-        }
-
-        if (str_starts_with($ref, 'formula:')) {
+            $form = FormBuilder::buildRulePopupForm($ruleData);
+        } elseif (str_starts_with($ref, 'formula:')) {
             $index = (int)substr($ref, 8);
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
             $formulaData = $formulaOutputs[$index] ?? [];
@@ -927,10 +879,17 @@ class bitCONTROL extends IPSModuleStrict
                 array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
                 'alias'
             ));
-            return FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
+            $form = FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
         }
 
-        return [];
+        foreach ($form as &$element) {
+            if (is_array($element)) {
+                $element['enabled'] = false;
+            }
+        }
+        unset($element);
+
+        return $form;
     }
 
     public function UIToggleFallbackActions(bool $enabled): void
