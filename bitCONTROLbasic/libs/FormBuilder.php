@@ -130,7 +130,7 @@ class FormBuilder
         return $day . ', ' . $time;
     }
 
-    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = []): array
+    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1): array
     {
         $elements = [];
 
@@ -152,6 +152,11 @@ class FormBuilder
             $modeOptions[] = ['caption' => 'Expert', 'value' => 2];
         } else {
             $modeOptions[] = ['caption' => 'Expert (Pro)', 'value' => 2];
+        }
+        if (ProLoader::has('combined')) {
+            $modeOptions[] = ['caption' => 'Combined', 'value' => 3];
+        } else {
+            $modeOptions[] = ['caption' => 'Combined (Pro)', 'value' => 3];
         }
 
         $elements[] = [
@@ -177,6 +182,13 @@ class FormBuilder
                     $elements = array_merge($elements, self::buildExpertElements($eventTriggers));
                 } else {
                     $elements[] = ['type' => 'Label', 'caption' => self::t('Expert mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
+                }
+                break;
+            case 3:
+                if (ProLoader::has('combined')) {
+                    $elements = array_merge($elements, self::buildCombinedElements($rules, $formulaOutputs, $combinedOrder, $combinedEvaluation));
+                } else {
+                    $elements[] = ['type' => 'Label', 'caption' => self::t('Combined mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
                 }
                 break;
         }
@@ -651,6 +663,86 @@ class FormBuilder
         ];
     }
 
+    private static function buildCombinedElements(array $rules, array $formulaOutputs, array $combinedOrder, int $combinedEvaluation): array
+    {
+        $orderedRefs = [];
+        foreach ($combinedOrder as $entry) {
+            $ref = is_array($entry) ? ($entry['ref'] ?? '') : (string)$entry;
+            if (is_string($ref) && str_contains($ref, ':')) {
+                $orderedRefs[] = $ref;
+            }
+        }
+
+        $allRefs = [];
+        foreach ($rules as $i => $rule) {
+            $allRefs[] = 'rule:' . $i;
+        }
+        foreach ($formulaOutputs as $i => $output) {
+            $allRefs[] = 'formula:' . $i;
+        }
+
+        foreach ($allRefs as $ref) {
+            if (!in_array($ref, $orderedRefs, true)) {
+                $orderedRefs[] = $ref;
+            }
+        }
+
+        $values = [];
+        foreach ($orderedRefs as $position => $ref) {
+            if (!str_contains($ref, ':')) {
+                continue;
+            }
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+
+            if ($type === 'rule' && isset($rules[$index])) {
+                $values[] = [
+                    'position'  => $position + 1,
+                    'entryType' => self::t('Rule'),
+                    'entryName' => $rules[$index]['name'] ?? 'Rule ' . ($index + 1),
+                    'ref'       => $ref,
+                ];
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                $values[] = [
+                    'position'  => $position + 1,
+                    'entryType' => self::t('Formula'),
+                    'entryName' => $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1),
+                    'ref'       => $ref,
+                ];
+            }
+        }
+
+        return [
+            [
+                'type'        => 'List',
+                'name'        => 'CombinedOrder',
+                'caption'     => self::t('Execution Order'),
+                'add'         => false,
+                'delete'      => false,
+                'changeOrder' => true,
+                'rowCount'    => 8,
+                'values'      => $values,
+                'columns'     => [
+                    ['caption' => '#', 'name' => 'position', 'width' => '40px', 'add' => 0],
+                    ['caption' => 'Type', 'name' => 'entryType', 'width' => '80px', 'add' => ''],
+                    ['caption' => 'Name', 'name' => 'entryName', 'width' => 'auto', 'add' => ''],
+                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false],
+                ],
+            ],
+            ['type' => 'RowLayout', 'items' => [
+                ['type' => 'Select', 'name' => 'CombinedEvaluation', 'caption' => 'Evaluation',
+                    'options' => [
+                        ['caption' => 'First match wins', 'value' => 0],
+                        ['caption' => 'Execute all matching', 'value' => 1],
+                    ],
+                    'onChange' => 'BIT_UIToggleCombinedSkip($id, $CombinedEvaluation);'],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipHeatup', 'caption' => self::t('Skip heatup'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipCooldown', 'caption' => self::t('Skip cooldown'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+                ['type' => 'CheckBox', 'name' => 'CombinedSkipInterval', 'caption' => self::t('Skip interval'), 'visible' => $combinedEvaluation === 0 && ProLoader::has('timing')],
+            ]],
+        ];
+    }
+
     private static function buildActions(): array
     {
         return [
@@ -779,6 +871,7 @@ class FormBuilder
             ['code' => 207, 'icon' => 'error', 'caption' => 'Rule limit exceeded'],
             ['code' => 208, 'icon' => 'error', 'caption' => 'Formula mode requires Plus license'],
             ['code' => 209, 'icon' => 'error', 'caption' => 'Expert mode requires Pro license'],
+            ['code' => 210, 'icon' => 'error', 'caption' => 'Combined mode requires Pro license'],
         ];
     }
 
@@ -802,6 +895,7 @@ class FormBuilder
                     ['type' => 'Label', 'caption' => ''],
                     ['type' => 'Label', 'caption' => self::t('Available with Pro:')],
                     ['type' => 'Label', 'caption' => '• ' . self::t('Expert mode (PHP scripting)')],
+                    ['type' => 'Label', 'caption' => '• ' . self::t('Combined mode (priority ordering)')],
                     ['type' => 'Label', 'caption' => '• ' . self::t('Mode chaining')],
                 ],
             ];
