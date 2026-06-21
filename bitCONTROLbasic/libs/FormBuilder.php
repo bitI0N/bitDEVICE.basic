@@ -723,10 +723,10 @@ class FormBuilder
                 'rowCount'    => 8,
                 'values'      => $values,
                 'columns'     => [
-                    ['caption' => '#', 'name' => 'position', 'width' => '40px', 'add' => 0, 'edit' => ['type' => 'NumberSpinner']],
-                    ['caption' => 'Type', 'name' => 'entryType', 'width' => '80px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                    ['caption' => 'Name', 'name' => 'entryName', 'width' => 'auto', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false, 'edit' => ['type' => 'ValidationTextBox']],
+                    ['caption' => '#', 'name' => 'position', 'width' => '40px', 'add' => 0],
+                    ['caption' => 'Type', 'name' => 'entryType', 'width' => '80px', 'add' => ''],
+                    ['caption' => 'Name', 'name' => 'entryName', 'width' => 'auto', 'add' => ''],
+                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false],
                 ],
             ],
             ['type' => 'RowLayout', 'items' => [
