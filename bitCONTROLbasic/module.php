@@ -562,7 +562,6 @@ class bitCONTROL extends IPSModuleStrict
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
 
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
-        $this->SendDebug('Combined', sprintf('refs=%s, rules=%d, formulas=%d', json_encode($refs), count($rules), count($formulaOutputs)), 0);
 
         $results = [];
 
@@ -572,7 +571,6 @@ class bitCONTROL extends IPSModuleStrict
 
             if ($type === 'rule' && isset($rules[$index])) {
                 $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
-                $this->SendDebug('Combined', sprintf('rule:%d => %s', $index, $result ?? 'null'), 0);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
@@ -580,10 +578,7 @@ class bitCONTROL extends IPSModuleStrict
                     }
                 }
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                $this->SendDebug('Combined', sprintf('formula:%d data=%s', $index, json_encode($formulaOutputs[$index])), 0);
-                $this->SendDebug('Combined', sprintf('formula:%d aliasMap=%s', $index, json_encode($aliasMap)), 0);
                 $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
-                $this->SendDebug('Combined', sprintf('formula:%d => %s', $index, $result ?? 'null'), 0);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
