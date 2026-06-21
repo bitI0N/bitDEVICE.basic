@@ -759,31 +759,35 @@ class FormBuilder
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
-                $values[] = array_merge($entry, $rule, [
-                    'position'       => $position + 1,
-                    'entryType'      => self::t('Rule'),
-                    'entryName'      => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
-                    'actionDisplay'  => self::formatRuleActionDisplay($rule),
-                    'delayDisplay'   => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
+                $values[] = array_merge($entry, [
+                    'position'        => $position + 1,
+                    'entryType'       => self::t('Rule'),
+                    'entryName'       => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
+                    'active'          => !empty($rule['active']),
+                    'actionDisplay'   => self::formatRuleActionDisplay($rule),
+                    'conditionDisplay' => $rule['conditions'] ?? '[]',
+                    'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
                     'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
-                    'statusDisplay'  => $ruleStatus,
-                    'rowColor'       => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
+                    'statusDisplay'   => $ruleStatus,
+                    'rowColor'        => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
                 ]);
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
                 $output = $formulaOutputs[$index];
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
-                $values[] = array_merge($entry, $output, [
-                    'position'       => $position + 1,
-                    'entryType'      => self::t('Formula'),
-                    'entryName'      => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
-                    'actionDisplay'  => self::formatFormulaActionDisplay($output),
-                    'delayDisplay'   => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
+                $values[] = array_merge($entry, [
+                    'position'        => $position + 1,
+                    'entryType'       => self::t('Formula'),
+                    'entryName'       => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
+                    'active'          => !empty($output['active']),
+                    'actionDisplay'   => self::formatFormulaActionDisplay($output),
+                    'conditionDisplay' => $output['conditions'] ?? '[]',
+                    'delayDisplay'    => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
                     'cooldownDisplay' => self::formatDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1)),
                     'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
-                    'statusDisplay'  => $status,
-                    'rowColor'       => $color,
+                    'statusDisplay'   => $status,
+                    'rowColor'        => $color,
                 ]);
             }
         }
@@ -805,7 +809,7 @@ class FormBuilder
                     ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
                     ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
                     ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
-                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
+                    ['caption' => self::t('Condition'), 'name' => 'conditionDisplay', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
                     ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
