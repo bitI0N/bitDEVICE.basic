@@ -151,7 +151,8 @@
             "Fallback": "Fallback",
             "Inactive": "Inaktiv",
             "No action": "Keine Aktion",
-            "No formula defined": "Keine Formel definiert"
+            "No formula defined": "Keine Formel definiert",
+            "Action / Formula": "Aktion / Formel"
         }
     }
 }
