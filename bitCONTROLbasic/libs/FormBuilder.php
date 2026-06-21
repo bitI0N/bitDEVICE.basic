@@ -759,13 +759,11 @@ class FormBuilder
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
-                $values[] = array_merge($entry, [
+                $values[] = array_merge($entry, $rule, [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Rule'),
                     'entryName'      => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
-                    'active'         => !empty($rule['active']),
                     'actionDisplay'  => self::formatRuleActionDisplay($rule),
-                    'conditions'     => $rule['conditions'] ?? '[]',
                     'delayDisplay'   => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
                     'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
@@ -776,13 +774,11 @@ class FormBuilder
                 $output = $formulaOutputs[$index];
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
-                $values[] = array_merge($entry, [
+                $values[] = array_merge($entry, $output, [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Formula'),
                     'entryName'      => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
-                    'active'         => !empty($output['active']),
                     'actionDisplay'  => self::formatFormulaActionDisplay($output),
-                    'conditions'     => $output['conditions'] ?? '[]',
                     'delayDisplay'   => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
                     'cooldownDisplay' => self::formatDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1)),
                     'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
