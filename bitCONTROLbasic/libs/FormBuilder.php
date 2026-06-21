@@ -739,35 +739,17 @@ class FormBuilder
 
     private static function buildCombinedElements(array $rules, array $formulaOutputs, array $combinedOrder, int $combinedEvaluation): array
     {
-        $orderedRefs = [];
-        foreach ($combinedOrder as $entry) {
-            $ref = is_array($entry) ? ($entry['ref'] ?? '') : (string)$entry;
-            if (is_string($ref) && str_contains($ref, ':')) {
-                $orderedRefs[] = $ref;
-            }
-        }
-
-        $allRefs = [];
-        foreach ($rules as $i => $rule) {
-            $allRefs[] = 'rule:' . $i;
-        }
-        foreach ($formulaOutputs as $i => $output) {
-            $allRefs[] = 'formula:' . $i;
-        }
-
-        foreach ($allRefs as $ref) {
-            if (!in_array($ref, $orderedRefs, true)) {
-                $orderedRefs[] = $ref;
-            }
-        }
-
         $allAliases = array_filter(array_merge(
             array_column($rules, 'name'),
             array_column($formulaOutputs, 'alias')
         ));
 
         $values = [];
-        foreach ($orderedRefs as $position => $ref) {
+        foreach ($combinedOrder as $position => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $ref = $entry['ref'] ?? '';
             if (!str_contains($ref, ':')) {
                 continue;
             }
@@ -777,11 +759,10 @@ class FormBuilder
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
-                $values[] = [
+                $values[] = array_merge($entry, [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Rule'),
                     'entryName'      => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
-                    'ref'            => $ref,
                     'active'         => !empty($rule['active']),
                     'actionDisplay'  => self::formatRuleActionDisplay($rule),
                     'conditions'     => $rule['conditions'] ?? '[]',
@@ -790,16 +771,15 @@ class FormBuilder
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
                     'statusDisplay'  => $ruleStatus,
                     'rowColor'       => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
-                ];
+                ]);
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
                 $output = $formulaOutputs[$index];
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
-                $values[] = [
+                $values[] = array_merge($entry, [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Formula'),
                     'entryName'      => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
-                    'ref'            => $ref,
                     'active'         => !empty($output['active']),
                     'actionDisplay'  => self::formatFormulaActionDisplay($output),
                     'conditions'     => $output['conditions'] ?? '[]',
@@ -808,7 +788,7 @@ class FormBuilder
                     'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
                     'statusDisplay'  => $status,
                     'rowColor'       => $color,
-                ];
+                ]);
             }
         }
 
@@ -834,7 +814,7 @@ class FormBuilder
                     ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Status'), 'name' => 'statusDisplay', 'width' => '100px', 'add' => ''],
-                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false],
+                    ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false, 'edit' => ['type' => 'ValidationTextBox']],
                 ],
             ],
             ['type' => 'RowLayout', 'items' => [
