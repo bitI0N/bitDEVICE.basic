@@ -805,7 +805,7 @@ class FormBuilder
                     ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
                     ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
                     ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
-                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]'],
+                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
                     ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
