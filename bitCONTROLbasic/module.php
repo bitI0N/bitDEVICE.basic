@@ -561,14 +561,11 @@ class bitCONTROL extends IPSModuleStrict
         $rules          = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
 
+        $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
+
         $results = [];
 
-        foreach ($combinedOrder as $entry) {
-            $ref = is_array($entry) ? ($entry['ref'] ?? '') : (string)$entry;
-            if (!is_string($ref) || !str_contains($ref, ':')) {
-                continue;
-            }
-
+        foreach ($refs as $ref) {
             [$type, $indexStr] = explode(':', $ref, 2);
             $index = (int)$indexStr;
 
@@ -592,6 +589,33 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         return !empty($results) ? implode(', ', $results) : null;
+    }
+
+    private function resolveCombinedRefs(array $combinedOrder, array $rules, array $formulaOutputs): array
+    {
+        $refs = [];
+        foreach ($combinedOrder as $entry) {
+            $ref = is_array($entry) ? ($entry['ref'] ?? '') : (string)$entry;
+            if (is_string($ref) && str_contains($ref, ':')) {
+                $refs[] = $ref;
+            }
+        }
+
+        $allRefs = [];
+        foreach ($rules as $i => $rule) {
+            $allRefs[] = 'rule:' . $i;
+        }
+        foreach ($formulaOutputs as $i => $output) {
+            $allRefs[] = 'formula:' . $i;
+        }
+
+        foreach ($allRefs as $ref) {
+            if (!in_array($ref, $refs, true)) {
+                $refs[] = $ref;
+            }
+        }
+
+        return $refs;
     }
 
     private function featureUnavailable(string $mode, string $tier): ?string
