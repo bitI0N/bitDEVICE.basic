@@ -205,6 +205,10 @@ class bitCONTROL extends IPSModuleStrict
 
         $this->pruneOrphanedState($mode);
 
+        if ($mode === 3) {
+            $this->syncCombinedOrder();
+        }
+
         $modeNames = [0 => 'Rule', 1 => 'Formula', 2 => 'Expert', 3 => 'Combined'];
         $this->SetSummary($modeNames[$mode] ?? 'Unknown');
         $this->SetValue('Active', true);
@@ -589,6 +593,51 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         return !empty($results) ? implode(', ', $results) : null;
+    }
+
+    private function syncCombinedOrder(): void
+    {
+        $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+        $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+        $combinedOrder = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
+
+        $existingRefs = [];
+        foreach ($combinedOrder as $entry) {
+            $r = is_array($entry) ? ($entry['ref'] ?? '') : '';
+            if ($r !== '') {
+                $existingRefs[] = $r;
+            }
+        }
+
+        $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
+
+        if ($existingRefs === $refs) {
+            return;
+        }
+
+        $newOrder = [];
+        foreach ($refs as $i => $ref) {
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+            if ($type === 'rule' && isset($rules[$index])) {
+                $entryType = 'Rule';
+                $name = $rules[$index]['name'] ?? 'Rule ' . ($index + 1);
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                $entryType = 'Formula';
+                $name = $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1);
+            } else {
+                continue;
+            }
+            $newOrder[] = [
+                'position' => $i + 1,
+                'entryType' => $entryType,
+                'entryName' => $name,
+                'ref' => $ref,
+            ];
+        }
+
+        IPS_SetProperty($this->InstanceID, 'CombinedOrder', json_encode($newOrder));
+        IPS_ApplyChanges($this->InstanceID);
     }
 
     private function resolveCombinedRefs(array $combinedOrder, array $rules, array $formulaOutputs): array
