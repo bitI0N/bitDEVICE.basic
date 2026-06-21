@@ -1147,7 +1147,7 @@ class bitCONTROL extends IPSModuleStrict
     private function writeOutput(int $variableID, mixed $value): void
     {
         $var = IPS_GetVariable($variableID);
-        if ($var['VariableAction'] > 0 || $var['VariableCustomAction'] > 0) {
+        if ($var['VariableAction'] > 0 && $var['VariableCustomAction'] === 0) {
             RequestAction($variableID, $value);
         } else {
             SetValue($variableID, $value);
