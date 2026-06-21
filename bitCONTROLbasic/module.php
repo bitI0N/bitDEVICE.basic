@@ -603,6 +603,7 @@ class bitCONTROL extends IPSModuleStrict
 
         $rulesChanged = false;
         $formulasChanged = false;
+        $slimFields = ['ref', 'position', 'entryType', 'entryName', 'active'];
         $ruleFields = ['name', 'active', 'conditions', 'actions', 'fallbackEnabled', 'fallbackActions', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
         $formulaFields = ['active', 'alias', 'variableID', 'formula', 'conditions', 'fallbackFormulaEnabled', 'fallbackFormula', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
 
@@ -614,19 +615,25 @@ class bitCONTROL extends IPSModuleStrict
             if (!str_contains($ref, ':')) {
                 continue;
             }
+
+            $hasContentFields = !empty(array_diff(array_keys($entry), $slimFields));
+            if (!$hasContentFields) {
+                continue;
+            }
+
             [$type, $indexStr] = explode(':', $ref, 2);
             $index = (int)$indexStr;
 
             if ($type === 'rule' && isset($rules[$index])) {
                 foreach ($ruleFields as $field) {
-                    if (array_key_exists($field, $entry) && ($entry[$field] ?? null) !== ($rules[$index][$field] ?? null)) {
+                    if (array_key_exists($field, $entry)) {
                         $rules[$index][$field] = $entry[$field];
                         $rulesChanged = true;
                     }
                 }
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
                 foreach ($formulaFields as $field) {
-                    if (array_key_exists($field, $entry) && ($entry[$field] ?? null) !== ($formulaOutputs[$index][$field] ?? null)) {
+                    if (array_key_exists($field, $entry)) {
                         $formulaOutputs[$index][$field] = $entry[$field];
                         $formulasChanged = true;
                     }
