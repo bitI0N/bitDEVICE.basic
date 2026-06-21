@@ -611,28 +611,7 @@ class bitCONTROL extends IPSModuleStrict
 
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
 
-        $needsSync = ($existingRefs !== $refs);
-
-        if (!$needsSync) {
-            foreach ($combinedOrder as $i => $entry) {
-                $ref = $entry['ref'] ?? '';
-                if (str_starts_with($ref, 'rule:')) {
-                    $index = (int)substr($ref, 5);
-                    if (isset($rules[$index]) && ($entry['name'] ?? '') !== ($rules[$index]['name'] ?? '')) {
-                        $needsSync = true;
-                        break;
-                    }
-                } elseif (str_starts_with($ref, 'formula:')) {
-                    $index = (int)substr($ref, 8);
-                    if (isset($formulaOutputs[$index]) && ($entry['alias'] ?? '') !== ($formulaOutputs[$index]['alias'] ?? '')) {
-                        $needsSync = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!$needsSync) {
+        if ($existingRefs === $refs) {
             return;
         }
 
@@ -641,19 +620,21 @@ class bitCONTROL extends IPSModuleStrict
             [$type, $indexStr] = explode(':', $ref, 2);
             $index = (int)$indexStr;
             if ($type === 'rule' && isset($rules[$index])) {
-                $newOrder[] = array_merge($rules[$index], [
+                $newOrder[] = [
+                    'ref' => $ref,
                     'position' => $i + 1,
                     'entryType' => 'Rule',
                     'entryName' => $rules[$index]['name'] ?? 'Rule ' . ($index + 1),
-                    'ref' => $ref,
-                ]);
+                    'active' => !empty($rules[$index]['active']),
+                ];
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                $newOrder[] = array_merge($formulaOutputs[$index], [
+                $newOrder[] = [
+                    'ref' => $ref,
                     'position' => $i + 1,
                     'entryType' => 'Formula',
                     'entryName' => $formulaOutputs[$index]['alias'] ?? 'Formula ' . ($index + 1),
-                    'ref' => $ref,
-                ]);
+                    'active' => !empty($formulaOutputs[$index]['active']),
+                ];
             }
         }
 
@@ -892,16 +873,22 @@ class bitCONTROL extends IPSModuleStrict
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
 
         if (str_starts_with($ref, 'rule:')) {
-            return FormBuilder::buildRulePopupForm($row);
+            $index = (int)substr($ref, 5);
+            $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+            $ruleData = $rules[$index] ?? [];
+            return FormBuilder::buildRulePopupForm($ruleData);
         }
 
         if (str_starts_with($ref, 'formula:')) {
+            $index = (int)substr($ref, 8);
+            $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            $formulaData = $formulaOutputs[$index] ?? [];
             $triggers = $this->getAllTriggers();
             $triggerAliases = array_filter(array_column(
                 array_filter($triggers, fn ($t) => ($t['type'] ?? 'event') === 'event'),
                 'alias'
             ));
-            return FormBuilder::buildFormulaPopupForm($row, $triggerAliases);
+            return FormBuilder::buildFormulaPopupForm($formulaData, $triggerAliases);
         }
 
         return [];
