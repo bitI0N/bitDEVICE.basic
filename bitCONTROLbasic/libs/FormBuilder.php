@@ -825,7 +825,7 @@ class FormBuilder
                 'form'        => ['return BIT_UIGetCombinedPopupForm($id, $CombinedOrder);'],
                 'columns'     => [
                     ['caption' => '#', 'name' => 'position', 'width' => '30px', 'add' => 0],
-                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true],
+                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
                     ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
                     ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
