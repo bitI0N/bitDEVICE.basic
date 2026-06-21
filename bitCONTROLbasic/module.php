@@ -601,6 +601,39 @@ class bitCONTROL extends IPSModuleStrict
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $combinedOrder = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
 
+        $rulesChanged = false;
+        $formulasChanged = false;
+        $ruleFields = ['name', 'active', 'conditions', 'actions', 'fallbackEnabled', 'fallbackActions', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
+        $formulaFields = ['active', 'alias', 'variableID', 'formula', 'conditions', 'fallbackFormulaEnabled', 'fallbackFormula', 'delaySeconds', 'delayUnit', 'heatupResetOnInterruption', 'cooldownSeconds', 'cooldownUnit', 'cooldownResetOnReactivation', 'intervalSeconds', 'intervalUnit'];
+
+        foreach ($combinedOrder as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $ref = $entry['ref'] ?? '';
+            if (!str_contains($ref, ':')) {
+                continue;
+            }
+            [$type, $indexStr] = explode(':', $ref, 2);
+            $index = (int)$indexStr;
+
+            if ($type === 'rule' && isset($rules[$index])) {
+                foreach ($ruleFields as $field) {
+                    if (array_key_exists($field, $entry) && ($entry[$field] ?? null) !== ($rules[$index][$field] ?? null)) {
+                        $rules[$index][$field] = $entry[$field];
+                        $rulesChanged = true;
+                    }
+                }
+            } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
+                foreach ($formulaFields as $field) {
+                    if (array_key_exists($field, $entry) && ($entry[$field] ?? null) !== ($formulaOutputs[$index][$field] ?? null)) {
+                        $formulaOutputs[$index][$field] = $entry[$field];
+                        $formulasChanged = true;
+                    }
+                }
+            }
+        }
+
         $existingRefs = [];
         foreach ($combinedOrder as $entry) {
             $r = is_array($entry) ? ($entry['ref'] ?? '') : '';
@@ -610,8 +643,9 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         $refs = $this->resolveCombinedRefs($combinedOrder, $rules, $formulaOutputs);
+        $needsRewrite = ($existingRefs !== $refs) || $rulesChanged || $formulasChanged;
 
-        if ($existingRefs === $refs) {
+        if (!$needsRewrite) {
             return;
         }
 
@@ -638,6 +672,12 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
+        if ($rulesChanged) {
+            IPS_SetProperty($this->InstanceID, 'Rules', json_encode($rules));
+        }
+        if ($formulasChanged) {
+            IPS_SetProperty($this->InstanceID, 'FormulaOutputs', json_encode($formulaOutputs));
+        }
         IPS_SetProperty($this->InstanceID, 'CombinedOrder', json_encode($newOrder));
         IPS_ApplyChanges($this->InstanceID);
     }
