@@ -472,9 +472,9 @@ class FormBuilder
             $parts[] = self::t('Action');
         }
         if ($fallback) {
-            $parts[] = self::t('Fallback');
+            $parts[] = '| ' . self::t('Fallback');
         }
-        return implode(' + ', $parts);
+        return implode(' ', $parts);
     }
 
     private static function formatFormulaActionDisplay(array $output): string
@@ -485,9 +485,21 @@ class FormBuilder
         }
         $display = $formula;
         if (!empty($output['fallbackFormulaEnabled']) && ($output['fallbackFormula'] ?? '') !== '') {
-            $display .= ' [fb: ' . $output['fallbackFormula'] . ']';
+            $display .= ' | ' . $output['fallbackFormula'];
         }
         return $display;
+    }
+
+    private static function computeRuleStatus(array $rule): string
+    {
+        if (empty($rule['active'])) {
+            return self::t('Inactive');
+        }
+        $actions = $rule['actions'] ?? '';
+        if ($actions === '' || $actions === '{}' || $actions === '[]') {
+            return self::t('No action');
+        }
+        return 'OK';
     }
 
     private static function computeFormulaStatus(array $output, array $allAliases): string
@@ -497,7 +509,7 @@ class FormBuilder
         }
         $formula = $output['formula'] ?? '';
         if ($formula === '') {
-            return self::t('No formula');
+            return self::t('No formula defined');
         }
         if (!ProLoader::has('formula')) {
             return 'OK';
@@ -528,11 +540,16 @@ class FormBuilder
             if ($name !== '') {
                 $seenNames[] = $name;
             }
+            $status = self::computeRuleStatus($rule);
+            if ($name !== '' && in_array($name, array_slice($seenNames, 0, -1), true)) {
+                $status = self::t('Duplicate name');
+            }
             $values[] = array_merge($rule, [
                 'rowColor'        => $color,
                 'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
                 'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
                 'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
+                'ruleStatus'      => $status,
             ]);
         }
 
@@ -566,6 +583,7 @@ class FormBuilder
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => 'Cooldown', 'name' => 'cooldownDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => 'Interval', 'name' => 'intervalDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => 'Status', 'name' => 'ruleStatus', 'width' => '100px', 'add' => 'OK'],
                     ['caption' => 'Actions', 'name' => 'actions', 'width' => '0px', 'add' => '{}', 'visible' => false, 'edit' => ['type' => 'SelectAction', 'multi' => true]],
                     ['caption' => '', 'name' => 'fallbackEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'fallbackActions', 'width' => '0px', 'add' => '{}', 'visible' => false, 'edit' => ['type' => 'SelectAction', 'multi' => true]],
@@ -758,10 +776,11 @@ class FormBuilder
 
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
+                $ruleStatus = self::computeRuleStatus($rule);
                 $values[] = [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Rule'),
-                    'entryName'      => $rule['name'] ?? 'Rule ' . ($index + 1),
+                    'entryName'      => $rule['name'] ?? self::t('Rule') . ' ' . ($index + 1),
                     'ref'            => $ref,
                     'active'         => !empty($rule['active']),
                     'actionDisplay'  => self::formatRuleActionDisplay($rule),
@@ -769,8 +788,8 @@ class FormBuilder
                     'delayDisplay'   => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
                     'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
-                    'statusDisplay'  => 'OK',
-                    'rowColor'       => empty($rule['active']) ? '#EEEEEE' : '#FFFFFF',
+                    'statusDisplay'  => $ruleStatus,
+                    'rowColor'       => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
                 ];
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
                 $output = $formulaOutputs[$index];
@@ -779,7 +798,7 @@ class FormBuilder
                 $values[] = [
                     'position'       => $position + 1,
                     'entryType'      => self::t('Formula'),
-                    'entryName'      => $output['alias'] ?? 'Formula ' . ($index + 1),
+                    'entryName'      => $output['alias'] ?? self::t('Formula') . ' ' . ($index + 1),
                     'ref'            => $ref,
                     'active'         => !empty($output['active']),
                     'actionDisplay'  => self::formatFormulaActionDisplay($output),
@@ -806,15 +825,15 @@ class FormBuilder
                 'form'        => ['return BIT_UIGetCombinedPopupForm($id, $CombinedOrder);'],
                 'columns'     => [
                     ['caption' => '#', 'name' => 'position', 'width' => '30px', 'add' => 0],
-                    ['caption' => 'Active', 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                    ['caption' => 'Type', 'name' => 'entryType', 'width' => '70px', 'add' => ''],
-                    ['caption' => 'Name', 'name' => 'entryName', 'width' => '120px', 'add' => ''],
+                    ['caption' => self::t('Active'), 'name' => 'active', 'width' => '50px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => self::t('Type'), 'name' => 'entryType', 'width' => '70px', 'add' => ''],
+                    ['caption' => self::t('Name'), 'name' => 'entryName', 'width' => '120px', 'add' => ''],
                     ['caption' => self::t('Action / Formula'), 'name' => 'actionDisplay', 'width' => 'auto', 'add' => ''],
-                    ['caption' => 'Condition', 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
-                    ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
-                    ['caption' => 'Cooldown', 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => self::t('Condition'), 'name' => 'conditions', 'width' => '150px', 'add' => '[]', 'edit' => ['type' => 'SelectCondition', 'multi' => true]],
+                    ['caption' => self::t('Heatup'), 'name' => 'delayDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
+                    ['caption' => self::t('Cooldown'), 'name' => 'cooldownDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
                     ['caption' => self::t('Interval'), 'name' => 'intervalDisplay', 'width' => '70px', 'add' => '-', 'visible' => ProLoader::has('timing')],
-                    ['caption' => 'Status', 'name' => 'statusDisplay', 'width' => '100px', 'add' => ''],
+                    ['caption' => self::t('Status'), 'name' => 'statusDisplay', 'width' => '100px', 'add' => ''],
                     ['caption' => '', 'name' => 'ref', 'width' => '0px', 'add' => '', 'visible' => false],
                 ],
             ],
