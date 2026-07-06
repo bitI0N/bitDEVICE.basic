@@ -69,7 +69,7 @@ class LicenseManager
             }
 
             if (isset($payload['checksum'])) {
-                $actualChecksum = hash('sha256', $zipData);
+                $actualChecksum = 'sha256:' . hash('sha256', $zipData);
                 if (!hash_equals($payload['checksum'], $actualChecksum)) {
                     return ['success' => false, 'error' => 'Package checksum mismatch.'];
                 }
@@ -211,7 +211,7 @@ class LicenseManager
             $zipData = $this->httpGet($response['download_url']);
             if ($zipData !== null) {
                 if (isset($payload['checksum'])) {
-                    $actualChecksum = hash('sha256', $zipData);
+                    $actualChecksum = 'sha256:' . hash('sha256', $zipData);
                     if (hash_equals($payload['checksum'], $actualChecksum)) {
                         $this->extractZip($zipData);
                         $updateAvailable = true;
