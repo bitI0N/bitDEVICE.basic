@@ -6,17 +6,19 @@ class LicenseManager
 {
     private string $dataPath;
     private string $keysPath;
-    private string $serverUrl = 'https://license.bition.com/api/v1';
+    private string $serverUrl;
 
     /** @var callable(string $method, string $path, ?array $body): ?array */
     private $httpTransport;
 
     private const GRACE_PERIOD_DAYS = 14;
+    private const DEFAULT_SERVER_URL = 'https://license.bition.com/api/v1';
 
-    public function __construct(string $dataPath, ?callable $httpTransport = null)
+    public function __construct(string $dataPath, ?callable $httpTransport = null, ?string $serverUrl = null)
     {
         $this->dataPath = $dataPath;
         $this->keysPath = dirname($dataPath) . '/libs/keys';
+        $this->serverUrl = $serverUrl ?? self::DEFAULT_SERVER_URL;
         $this->httpTransport = $httpTransport;
     }
 
