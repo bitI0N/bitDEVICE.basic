@@ -468,6 +468,11 @@ class LicenseManager
             return is_string($result) ? $result : (is_array($result) ? json_encode($result) : null);
         }
 
+        if (!str_starts_with($url, 'http')) {
+            $baseUrl = preg_replace('#/api/v\d+$#', '', $this->serverUrl);
+            $url = $baseUrl . $url;
+        }
+
         $context = stream_context_create([
             'http' => [
                 'method'        => 'GET',
