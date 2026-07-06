@@ -266,15 +266,15 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         if ($status['state'] === 'active') {
             $actions[] = ['type' => 'RowLayout', 'items' => [
-                ['type' => 'Button', 'caption' => $this->t('Check for Updates'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'],
-                ['type' => 'Button', 'caption' => $this->t('Deactivate'), 'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Check for Updates'), 'onClick' => 'IPS_RequestAction($id, "LicenseRefresh", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Deactivate'), 'onClick' => 'IPS_RequestAction($id, "LicenseDeactivate", "");'],
             ]];
         } elseif ($status['state'] === 'grace') {
-            $actions[] = ['type' => 'Button', 'caption' => $this->t('Retry Now'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'];
+            $actions[] = ['type' => 'Button', 'caption' => $this->t('Retry Now'), 'onClick' => 'IPS_RequestAction($id, "LicenseRefresh", "");'];
         } else {
             $actions[] = ['type' => 'RowLayout', 'items' => [
                 ['type' => 'ValidationTextBox', 'name' => 'LicenseKey', 'caption' => $this->t('License Key'), 'width' => '350px'],
-                ['type' => 'Button', 'caption' => $this->t('Activate'), 'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);'],
+                ['type' => 'Button', 'caption' => $this->t('Activate'), 'onClick' => 'IPS_RequestAction($id, "LicenseActivate", $LicenseKey);'],
             ]];
         }
 
