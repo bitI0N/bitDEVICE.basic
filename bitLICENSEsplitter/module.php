@@ -116,7 +116,7 @@ class bitCONTROLLicense extends IPSModuleStrict
             if ($simTier > 0) {
                 SimulationProvider::activate($simTier, $this->getDataPath());
                 ProLoader::reset();
-                ProLoader::boot($this->getDataPath());
+                ProLoader::boot($this->getDataPath(), true);
                 $this->SetSummary(SimulationProvider::getTierName($simTier) . ' (Sim)');
                 $this->SetStatus(102);
                 $this->SetTimerInterval('LicenseRevalidation', 0);

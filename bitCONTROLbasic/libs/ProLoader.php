@@ -11,7 +11,7 @@ class ProLoader
     {
     }
 
-    public static function boot(string $dataPath): void
+    public static function boot(string $dataPath, bool $simulation = false): void
     {
         if (self::$booted) {
             return;
@@ -25,16 +25,10 @@ class ProLoader
             return;
         }
 
-        $files = glob($proDir . '/*.php');
-        if (count($files) > 1) {
-            foreach ($files as $file) {
-                if (basename($file) === 'manifest.php') {
-                    continue;
-                }
-                self::loadFile($file);
-            }
-        } else {
+        if ($simulation) {
             require_once $manifest;
+        } else {
+            self::loadFile($manifest);
         }
     }
 
