@@ -34,7 +34,7 @@ class ProLoader
                 self::loadFile($file);
             }
         } else {
-            include $manifest;
+            require_once $manifest;
         }
     }
 
