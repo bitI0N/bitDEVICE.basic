@@ -170,19 +170,19 @@ class bitCONTROLLicense extends IPSModuleStrict
             $this->SetStatus(201);
         }
 
-        echo json_encode($result);
+        $this->ReloadForm();
     }
 
     private function handleDeactivation(): void
     {
         $lm = $this->createLicenseManager();
-        $lm->deactivate();
+        $lm->deactivate($this->getLicensee());
 
         ProLoader::reset();
         $this->deactivatePro();
         $this->SendDebug('License', 'Deactivated', 0);
 
-        echo json_encode(['success' => true]);
+        $this->ReloadForm();
     }
 
     private function handleRevalidation(): void
@@ -200,7 +200,7 @@ class bitCONTROLLicense extends IPSModuleStrict
             $this->SendDebug('License', 'Revalidation failed: ' . ($result['error'] ?? ''), 0);
         }
 
-        echo json_encode($result);
+        $this->ReloadForm();
     }
 
     private function getDataPath(): string

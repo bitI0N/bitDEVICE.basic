@@ -236,13 +236,10 @@ class LicenseManager
      *
      * Best-effort server notification. Always cleans up local files.
      */
-    public function deactivate(): void
+    public function deactivate(string $licensee = ''): void
     {
-        $state = $this->loadState();
-
-        if ($state !== null && !empty($state['token'])) {
-            // Best-effort — ignore server errors or unreachability
-            $this->httpPost('/deactivate', ['token' => $state['token']]);
+        if ($licensee !== '') {
+            $this->httpPost('/deactivate', ['licensee' => $licensee]);
         }
 
         $licenseFile = $this->dataPath . '/license.json';
@@ -505,10 +502,11 @@ class LicenseManager
             }
 
             $proDir = $this->dataPath . '/pro';
-            if (!is_dir($proDir)) {
-                if (!@mkdir($proDir, 0755, true)) {
-                    return false;
-                }
+            if (is_dir($proDir)) {
+                $this->removeDirectory($proDir);
+            }
+            if (!@mkdir($proDir, 0755, true)) {
+                return false;
             }
 
             $zip = new ZipArchive();
