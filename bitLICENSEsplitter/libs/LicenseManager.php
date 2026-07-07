@@ -261,22 +261,25 @@ class LicenseManager
     public function getStatus(): array
     {
         $validation = $this->validate();
-        $licensee   = '';
+        $licensee     = '';
+        $updatesUntil = null;
 
         $state = $this->loadState();
         if ($state !== null && !empty($state['token'])) {
             $payload = $this->verifyToken($state['token']);
             if ($payload !== null) {
                 $licensee = $payload['sub'] ?? '';
+                $updatesUntil = $payload['updates_until'] ?? null;
             }
         }
 
         return [
-            'state'    => $validation['state'],
-            'tier'     => $validation['tier'],
-            'licensee' => $licensee,
-            'expires'  => $validation['expires'],
-            'daysLeft' => $validation['daysLeft'],
+            'state'        => $validation['state'],
+            'tier'         => $validation['tier'],
+            'licensee'     => $licensee,
+            'updatesUntil' => $updatesUntil,
+            'expires'      => $validation['expires'],
+            'daysLeft'     => $validation['daysLeft'],
         ];
     }
 

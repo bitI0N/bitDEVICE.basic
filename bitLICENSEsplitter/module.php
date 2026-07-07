@@ -138,7 +138,13 @@ class bitCONTROLLicense extends IPSModuleStrict
         ProLoader::boot($this->getDataPath());
 
         $tier = ProLoader::tier();
-        $this->SetSummary(ucfirst($tier) . ' — active');
+        $lm = $this->createLicenseManager();
+        $fullStatus = $lm->getStatus();
+        $summary = ucfirst($tier);
+        if (!empty($fullStatus['licensee'])) {
+            $summary .= ' (' . $fullStatus['licensee'] . ')';
+        }
+        $this->SetSummary($summary);
         $this->SetStatus(102);
         $this->SetTimerInterval('LicenseRevalidation', self::REVALIDATION_INTERVAL_MS);
 
@@ -235,10 +241,10 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         switch ($status['state']) {
             case 'active':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — active', ucfirst($status['tier'] ?? 'community')), 'bold' => true, 'color' => 0x00AA00];
+                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %s', ucfirst($status['tier'] ?? 'community'), $this->t('active')), 'bold' => true, 'color' => 0x00AA00];
                 $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Licensed to:'), $status['licensee'] ?? '')];
-                if (!empty($status['expires'])) {
-                    $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Updates until:'), $status['expires'])];
+                if (!empty($status['updatesUntil'])) {
+                    $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Updates until:'), $status['updatesUntil'])];
                 }
                 break;
 
