@@ -20,14 +20,21 @@ class ProLoader
         self::$booted = true;
 
         $proDir = $dataPath . '/pro';
-        if (!is_dir($proDir)) {
+        $manifest = $proDir . '/manifest.php';
+        if (!file_exists($manifest)) {
             return;
         }
-        foreach (glob($proDir . '/*.php') as $file) {
-            if (basename($file) === 'manifest.php') {
-                continue;
+
+        $files = glob($proDir . '/*.php');
+        if (count($files) > 1) {
+            foreach ($files as $file) {
+                if (basename($file) === 'manifest.php') {
+                    continue;
+                }
+                self::loadFile($file);
             }
-            self::loadFile($file);
+        } else {
+            include $manifest;
         }
     }
 
