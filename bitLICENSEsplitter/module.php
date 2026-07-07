@@ -111,9 +111,9 @@ class bitCONTROLLicense extends IPSModuleStrict
     private function bootLicense(): void
     {
         if ($this->hasSimulator()) {
+            require_once __DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php';
             $simTier = $this->ReadPropertyInteger('SimulationTier');
             if ($simTier > 0) {
-                require_once __DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php';
                 SimulationProvider::activate($simTier, $this->getDataPath());
                 ProLoader::reset();
                 ProLoader::boot($this->getDataPath());
@@ -121,6 +121,10 @@ class bitCONTROLLicense extends IPSModuleStrict
                 $this->SetStatus(102);
                 $this->SetTimerInterval('LicenseRevalidation', 0);
                 return;
+            }
+            if (!$this->hasRealLicense()) {
+                SimulationProvider::deactivate($this->getDataPath());
+                ProLoader::reset();
             }
         }
 
@@ -207,6 +211,11 @@ class bitCONTROLLicense extends IPSModuleStrict
         }
 
         $this->ReloadForm();
+    }
+
+    private function hasRealLicense(): bool
+    {
+        return file_exists($this->getDataPath() . '/license.json');
     }
 
     private function getDataPath(): string
