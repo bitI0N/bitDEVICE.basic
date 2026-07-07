@@ -73,6 +73,7 @@ class ProLoader
             return;
         }
         $code = preg_replace('/^<\?php\s*/i', '', $code);
+        $code = str_replace('__DIR__', "'" . dirname($file) . "'", $code);
         eval($code);
     }
 }
