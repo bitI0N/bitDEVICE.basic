@@ -123,7 +123,7 @@ class bitCONTROLLicense extends IPSModuleStrict
                 return;
             }
             if (!$this->hasRealLicense()) {
-                SimulationProvider::deactivate($this->getDataPath());
+                SimulationProvider::deactivate($this->getDataPath()); // @phpstan-ignore staticMethod.notFound
                 ProLoader::reset();
             }
         }
