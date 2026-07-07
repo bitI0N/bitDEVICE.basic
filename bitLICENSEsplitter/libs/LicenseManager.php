@@ -263,6 +263,7 @@ class LicenseManager
         $validation = $this->validate();
         $licensee     = '';
         $updatesUntil = null;
+        $features     = [];
 
         $state = $this->loadState();
         if ($state !== null && !empty($state['token'])) {
@@ -270,6 +271,7 @@ class LicenseManager
             if ($payload !== null) {
                 $licensee = $payload['sub'] ?? '';
                 $updatesUntil = $payload['updates_until'] ?? null;
+                $features = $payload['features'] ?? [];
             }
         }
 
@@ -278,6 +280,7 @@ class LicenseManager
             'tier'         => $validation['tier'],
             'licensee'     => $licensee,
             'updatesUntil' => $updatesUntil,
+            'features'     => $features,
             'expires'      => $validation['expires'],
             'daysLeft'     => $validation['daysLeft'],
         ];

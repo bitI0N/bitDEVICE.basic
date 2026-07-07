@@ -241,25 +241,40 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         switch ($status['state']) {
             case 'active':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %s', ucfirst($status['tier'] ?? 'community'), $this->t('active')), 'bold' => true, 'color' => 0x00AA00];
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Licensed to:'), $status['licensee'] ?? '')];
+                $elements[] = ['type' => 'RowLayout', 'items' => [
+                    ['type' => 'Label', 'caption' => $this->Translate('Active License:'), 'bold' => true, 'width' => '130px'],
+                    ['type' => 'Label', 'caption' => ucfirst($status['tier'] ?? 'community')],
+                ]];
+                if (!empty($status['features'])) {
+                    $elements[] = ['type' => 'RowLayout', 'items' => [
+                        ['type' => 'Label', 'caption' => $this->Translate('Features:'), 'bold' => true, 'width' => '130px'],
+                        ['type' => 'Label', 'caption' => implode(', ', $status['features'])],
+                    ]];
+                }
+                $elements[] = ['type' => 'RowLayout', 'items' => [
+                    ['type' => 'Label', 'caption' => $this->Translate('Licensed to:'), 'bold' => true, 'width' => '130px'],
+                    ['type' => 'Label', 'caption' => $status['licensee'] ?? ''],
+                ]];
                 if (!empty($status['updatesUntil'])) {
-                    $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Updates until:'), $status['updatesUntil'])];
+                    $elements[] = ['type' => 'RowLayout', 'items' => [
+                        ['type' => 'Label', 'caption' => $this->Translate('Updates until:'), 'bold' => true, 'width' => '130px'],
+                        ['type' => 'Label', 'caption' => $status['updatesUntil']],
+                    ]];
                 }
                 break;
 
             case 'grace':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %d %s', $this->t('Grace Period'), $status['daysLeft'] ?? 0, $this->t('days remaining')), 'bold' => true, 'color' => 0xCC8800];
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('License server unreachable. Features remain active temporarily.')];
+                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %d %s', $this->Translate('Grace Period'), $status['daysLeft'] ?? 0, $this->Translate('days remaining')), 'bold' => true, 'color' => 0xCC8800];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('License server unreachable. Features remain active temporarily.')];
                 break;
 
             case 'expired':
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('License expired — running in Community mode'), 'bold' => true, 'color' => 0xCC0000];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('License expired — running in Community mode'), 'bold' => true, 'color' => 0xCC0000];
                 break;
 
             default:
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('Community Edition'), 'bold' => true];
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('Unlock Formula mode, unlimited triggers and rules, and more.'), 'italic' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('Community Edition'), 'bold' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('Unlock Formula mode, unlimited triggers and rules, and more.'), 'italic' => true];
                 break;
         }
 
