@@ -232,11 +232,36 @@ class bitCONTROLLicense extends IPSModuleStrict
     private function createLicenseManager(): LicenseManager
     {
         $serverUrl = $this->ReadPropertyString('ServerUrl');
+        if ($serverUrl === '') {
+            $serverUrl = $this->getEnv('BITDEVICE_LICENSE_URL');
+        }
         return new LicenseManager(
             $this->getDataPath(),
             null,
             $serverUrl !== '' ? $serverUrl : null
         );
+    }
+
+    private function getEnv(string $key): string
+    {
+        $value = getenv($key);
+        if ($value !== false && $value !== '') {
+            return $value;
+        }
+        $envFile = __DIR__ . '/../.env.local';
+        if (!file_exists($envFile)) {
+            return '';
+        }
+        $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (str_starts_with($line, '#')) {
+                continue;
+            }
+            if (str_starts_with($line, $key . '=')) {
+                return substr($line, strlen($key) + 1);
+            }
+        }
+        return '';
     }
 
     private function t(string $s): string
