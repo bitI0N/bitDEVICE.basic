@@ -233,7 +233,7 @@ class bitCONTROLLicense extends IPSModuleStrict
     {
         $serverUrl = $this->ReadPropertyString('ServerUrl');
         if ($serverUrl === '') {
-            $serverUrl = $this->getEnv('BITDEVICE_LICENSE_URL');
+            $serverUrl = $this->getEnv('BITHOME_LICENSE_VALIDATION');
         }
         return new LicenseManager(
             $this->getDataPath(),
