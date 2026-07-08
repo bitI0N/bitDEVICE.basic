@@ -77,16 +77,15 @@ StyleCopReport.xml
 ### PHP
 /vendor/
 !/vendor/legion
-/vendor/bithome/vendor/
 !/vendor/bithome
+!/vendor/bitdevice
+/vendor/legion/vendor/
 /vendor/bithome/vendor/
-*.phar
+/vendor/bitdevice/vendor/
 .phpunit.result.cache
 .phpunit.cache/
 coverage-*.xml
 cov-*.xml
-### PIPELINE ARTIFACTS
-build/dist/
 ### PYTHON
 __pycache__/
 *.pyc
