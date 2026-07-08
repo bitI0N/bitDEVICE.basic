@@ -141,6 +141,17 @@ class bitCONTROLLicense extends IPSModuleStrict
     {
         ProLoader::boot($this->getDataPath());
 
+        // Bind loaded capabilities to the signed token: the package on disk must
+        // not grant a higher tier than the license permits. Blocks unlocking Pro
+        // by dropping fabricated capability files into data/pro/ under a Plus token.
+        $loadedTier = ProLoader::tier();
+        $licensedTier = $status['tier'] ?? 'community';
+        if ($this->tierRank($loadedTier) > $this->tierRank($licensedTier)) {
+            $this->SendDebug('License', sprintf('Tier mismatch: package=%s exceeds license=%s — refusing', $loadedTier, $licensedTier), 0);
+            $this->deactivatePro();
+            return;
+        }
+
         $tier = ProLoader::tier();
         $lm = $this->createLicenseManager();
         $fullStatus = $lm->getStatus();
@@ -164,6 +175,15 @@ class bitCONTROLLicense extends IPSModuleStrict
         $this->SetSummary('Community');
         $this->SetStatus(102);
         $this->SetTimerInterval('LicenseRevalidation', 0);
+    }
+
+    private function tierRank(string $tier): int
+    {
+        return match ($tier) {
+            'pro' => 2,
+            'plus' => 1,
+            default => 0,
+        };
     }
 
     private function handleActivation(string $key): void
@@ -206,6 +226,10 @@ class bitCONTROLLicense extends IPSModuleStrict
                 $this->bootLicense();
                 $this->SendDebug('License', 'Updated to new version', 0);
             }
+        } elseif (!empty($result['revoked'])) {
+            ProLoader::reset();
+            $this->deactivatePro();
+            $this->SendDebug('License', 'License revoked by server — downgraded to Community', 0);
         } else {
             $this->SendDebug('License', 'Revalidation failed: ' . ($result['error'] ?? ''), 0);
         }
@@ -238,7 +262,8 @@ class bitCONTROLLicense extends IPSModuleStrict
         return new LicenseManager(
             $this->getDataPath(),
             null,
-            $serverUrl !== '' ? $serverUrl : null
+            $serverUrl !== '' ? $serverUrl : null,
+            $this->getLicensee()
         );
     }
 
