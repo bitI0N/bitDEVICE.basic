@@ -11,7 +11,7 @@ class ProLoader
     {
     }
 
-    public static function boot(string $dataPath): void
+    public static function boot(string $dataPath, bool $simulation = false): void
     {
         if (self::$booted) {
             return;
@@ -19,9 +19,16 @@ class ProLoader
 
         self::$booted = true;
 
-        $manifest = $dataPath . '/pro/manifest.php';
-        if (file_exists($manifest)) {
+        $proDir = $dataPath . '/pro';
+        $manifest = $proDir . '/manifest.php';
+        if (!file_exists($manifest)) {
+            return;
+        }
+
+        if ($simulation) {
             require_once $manifest;
+        } else {
+            self::loadFile($manifest);
         }
     }
 
@@ -53,10 +60,20 @@ class ProLoader
         return 'community';
     }
 
-    // Clears all registered capabilities and resets the booted flag for license state changes.
     public static function reset(): void
     {
         self::$capabilities = [];
         self::$booted = false;
+    }
+
+    private static function loadFile(string $file): void
+    {
+        $code = file_get_contents($file);
+        if ($code === false) {
+            return;
+        }
+        $code = preg_replace('/^<\?php\s*/i', '', $code);
+        $code = str_replace('__DIR__', "'" . dirname($file) . "'", $code);
+        eval($code);
     }
 }

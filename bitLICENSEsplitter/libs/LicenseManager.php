@@ -6,18 +6,29 @@ class LicenseManager
 {
     private string $dataPath;
     private string $keysPath;
-    private string $serverUrl = 'https://license.bition.com/api/v1';
+    private string $serverUrl;
+    private ?string $licensee;
 
     /** @var callable(string $method, string $path, ?array $body): ?array */
     private $httpTransport;
 
     private const GRACE_PERIOD_DAYS = 14;
+    private const DEFAULT_SERVER_URL = 'https://license.bition.com/api/v1';
 
-    public function __construct(string $dataPath, ?callable $httpTransport = null)
+    /**
+     * @param string|null $licensee Expected token subject (IPS_GetLicensee()).
+     *                              When set, tokens whose `sub` does not match
+     *                              are rejected at runtime, binding a license to
+     *                              the Symcon instance it was issued for. Null
+     *                              disables the binding (tooling / tests).
+     */
+    public function __construct(string $dataPath, ?callable $httpTransport = null, ?string $serverUrl = null, ?string $licensee = null)
     {
         $this->dataPath = $dataPath;
         $this->keysPath = dirname($dataPath) . '/libs/keys';
+        $this->serverUrl = $serverUrl ?? self::DEFAULT_SERVER_URL;
         $this->httpTransport = $httpTransport;
+        $this->licensee = $licensee;
     }
 
     // -------------------------------------------------------------------------
@@ -68,11 +79,14 @@ class LicenseManager
                 return ['success' => false, 'error' => 'Failed to download license package.'];
             }
 
-            if (isset($payload['checksum'])) {
-                $actualChecksum = hash('sha256', $zipData);
-                if (!hash_equals($payload['checksum'], $actualChecksum)) {
-                    return ['success' => false, 'error' => 'Package checksum mismatch.'];
-                }
+            // Integrity is mandatory: refuse to extract a package that is not
+            // covered by a signed checksum claim (fail closed, not open).
+            if (!isset($payload['checksum']) || $payload['checksum'] === '') {
+                return ['success' => false, 'error' => 'Package integrity claim missing.'];
+            }
+            $actualChecksum = 'sha256:' . hash('sha256', $zipData);
+            if (!hash_equals($payload['checksum'], $actualChecksum)) {
+                return ['success' => false, 'error' => 'Package checksum mismatch.'];
             }
 
             if (!$this->extractZip($zipData)) {
@@ -170,9 +184,11 @@ class LicenseManager
      *
      * - POSTs to /revalidate with the current token, licensee, and installed checksum
      * - On success: saves the new token; downloads updated package if available
-     * - On failure: starts / continues the grace period
+     * - On unreachable server: keeps the license (grace period handled by validate())
+     * - On explicit revocation (server reports license_valid=false): wipes the
+     *   local license and Pro code so the module falls back to Community
      *
-     * @return array{success: bool, update_available?: bool, error?: string}
+     * @return array{success: bool, update_available?: bool, revoked?: bool, error?: string}
      */
     public function revalidate(string $licensee): array
     {
@@ -191,11 +207,23 @@ class LicenseManager
         ]);
 
         if ($response === null) {
-            // Server unreachable — grace period handled by validate()
+            // Server unreachable — keep the license; grace period handled by validate()
             return ['success' => false, 'error' => 'Server unreachable. Grace period continues.'];
         }
 
         if (!isset($response['token'])) {
+            // Definitive revocation: the server reached us and rejected the license
+            // (refund / chargeback / fraud / seat moved). Only this explicit signal
+            // downgrades a perpetual license — transient errors keep it running.
+            if (($response['license_valid'] ?? null) === false) {
+                $this->clearLocalLicense();
+                return [
+                    'success' => false,
+                    'revoked' => true,
+                    'error'   => $response['error'] ?? 'License has been revoked.',
+                ];
+            }
+
             $error = $response['error'] ?? 'Invalid server response.';
             return ['success' => false, 'error' => $error];
         }
@@ -209,14 +237,12 @@ class LicenseManager
 
         if (isset($response['download_url'])) {
             $zipData = $this->httpGet($response['download_url']);
-            if ($zipData !== null) {
-                if (isset($payload['checksum'])) {
-                    $actualChecksum = hash('sha256', $zipData);
-                    if (hash_equals($payload['checksum'], $actualChecksum)) {
-                        $this->extractZip($zipData);
-                        $updateAvailable = true;
-                    }
-                } else {
+            // Only extract when the package matches a signed checksum claim. A
+            // missing claim or a mismatch leaves the current installation intact
+            // (fail closed).
+            if ($zipData !== null && isset($payload['checksum']) && $payload['checksum'] !== '') {
+                $actualChecksum = 'sha256:' . hash('sha256', $zipData);
+                if (hash_equals($payload['checksum'], $actualChecksum)) {
                     $this->extractZip($zipData);
                     $updateAvailable = true;
                 }
@@ -234,15 +260,27 @@ class LicenseManager
      *
      * Best-effort server notification. Always cleans up local files.
      */
-    public function deactivate(): void
+    public function deactivate(string $licensee = ''): void
     {
-        $state = $this->loadState();
-
-        if ($state !== null && !empty($state['token'])) {
-            // Best-effort — ignore server errors or unreachability
-            $this->httpPost('/deactivate', ['token' => $state['token']]);
+        if ($licensee !== '') {
+            // Send the current token so the server can authenticate the seat
+            // release (it verifies signature + sub == licensee).
+            $state = $this->loadState();
+            $token = is_array($state) ? ($state['token'] ?? '') : '';
+            if ($token !== '') {
+                $this->httpPost('/deactivate', ['licensee' => $licensee, 'token' => $token]);
+            }
         }
 
+        $this->clearLocalLicense();
+    }
+
+    /**
+     * Remove the local license token and downloaded Pro package, without any
+     * server notification. Used on deactivation and on server-side revocation.
+     */
+    private function clearLocalLicense(): void
+    {
         $licenseFile = $this->dataPath . '/license.json';
         if (file_exists($licenseFile)) {
             @unlink($licenseFile);
@@ -262,22 +300,28 @@ class LicenseManager
     public function getStatus(): array
     {
         $validation = $this->validate();
-        $licensee   = '';
+        $licensee     = '';
+        $updatesUntil = null;
+        $features     = [];
 
         $state = $this->loadState();
         if ($state !== null && !empty($state['token'])) {
             $payload = $this->verifyToken($state['token']);
             if ($payload !== null) {
                 $licensee = $payload['sub'] ?? '';
+                $updatesUntil = $payload['updates_until'] ?? null;
+                $features = $payload['features'] ?? [];
             }
         }
 
         return [
-            'state'    => $validation['state'],
-            'tier'     => $validation['tier'],
-            'licensee' => $licensee,
-            'expires'  => $validation['expires'],
-            'daysLeft' => $validation['daysLeft'],
+            'state'        => $validation['state'],
+            'tier'         => $validation['tier'],
+            'licensee'     => $licensee,
+            'updatesUntil' => $updatesUntil,
+            'features'     => $features,
+            'expires'      => $validation['expires'],
+            'daysLeft'     => $validation['daysLeft'],
         ];
     }
 
@@ -342,30 +386,38 @@ class LicenseManager
             return null;
         }
 
+        // Runtime binding: a token is only valid on the instance it was issued
+        // for. Reject a token whose subject does not match the expected licensee
+        // (prevents copying data/license.json to another Symcon installation).
+        if ($this->licensee !== null && ($payload['sub'] ?? null) !== $this->licensee) {
+            return null;
+        }
+
         return $payload;
     }
 
     /**
      * Load a PEM public key for the given key ID.
      *
-     * The key file is expected at keys/<kid>.pub.
+     * The key file must exist at keys/<kid>.pub. Resolution is strict: the kid
+     * from the token header selects exactly one key. There is deliberately no
+     * "newest available key" fallback — during key rotation the client ships the
+     * current and predecessor keys, and a token must be verified against the key
+     * its kid names (or rejected).
      *
-     * @return string|false  PEM string or false if not found
+     * @return string|false  PEM string or false if the kid is unknown
      */
     private function loadPublicKey(string $kid): string|false
     {
-        // Sanitise kid to prevent path traversal
+        // Sanitise kid to prevent path traversal.
         $safekid = preg_replace('/[^a-zA-Z0-9\-_.]/', '', $kid);
-        $keyFile = $this->keysPath . '/' . $safekid . '.pub';
+        if ($safekid === '') {
+            return false;
+        }
 
-        if (!file_exists($keyFile)) {
-            // Fall back to the most recent key file available
-            $keyFiles = glob($this->keysPath . '/*.pub');
-            if (empty($keyFiles)) {
-                return false;
-            }
-            sort($keyFiles);
-            $keyFile = end($keyFiles);
+        $keyFile = $this->keysPath . '/' . $safekid . '.pub';
+        if (!is_file($keyFile)) {
+            return false;
         }
 
         $pem = file_get_contents($keyFile);
@@ -466,6 +518,19 @@ class LicenseManager
             return is_string($result) ? $result : (is_array($result) ? json_encode($result) : null);
         }
 
+        // The server only ever returns server-relative download paths. Build the
+        // URL from the trusted base and refuse absolute URLs that point anywhere
+        // other than the license-server origin — this blocks a tampered/hostile
+        // response from redirecting the download to an attacker host or plain http.
+        $baseUrl = preg_replace('#/api/v\d+$#', '', $this->serverUrl);
+        if (str_starts_with($url, 'http')) {
+            if ($url !== $baseUrl && !str_starts_with($url, $baseUrl . '/')) {
+                return null;
+            }
+        } else {
+            $url = $baseUrl . $url;
+        }
+
         $context = stream_context_create([
             'http' => [
                 'method'        => 'GET',
@@ -498,16 +563,27 @@ class LicenseManager
             }
 
             $proDir = $this->dataPath . '/pro';
-            if (!is_dir($proDir)) {
-                if (!@mkdir($proDir, 0755, true)) {
-                    return false;
-                }
+            if (is_dir($proDir)) {
+                $this->removeDirectory($proDir);
+            }
+            if (!@mkdir($proDir, 0755, true)) {
+                return false;
             }
 
             $zip = new ZipArchive();
             $result = $zip->open($tmpFile);
             if ($result !== true) {
                 return false;
+            }
+
+            // Guard against Zip Slip: reject absolute paths, Windows drive
+            // prefixes, and any '..' traversal segment before extraction.
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name === false || !$this->isSafeZipEntry($name)) {
+                    $zip->close();
+                    return false;
+                }
             }
 
             $extracted = $zip->extractTo($proDir);
@@ -517,6 +593,33 @@ class LicenseManager
         } finally {
             @unlink($tmpFile);
         }
+    }
+
+    /**
+     * Whether a ZIP entry name is safe to extract (no absolute path, no drive
+     * prefix, no parent-directory traversal).
+     */
+    private function isSafeZipEntry(string $name): bool
+    {
+        if ($name === '') {
+            return false;
+        }
+
+        $normalized = str_replace('\\', '/', $name);
+
+        // Absolute path or Windows drive prefix (e.g. "C:...").
+        if ($normalized[0] === '/' || preg_match('#^[A-Za-z]:#', $normalized) === 1) {
+            return false;
+        }
+
+        // Any '..' path segment.
+        foreach (explode('/', $normalized) as $segment) {
+            if ($segment === '..') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

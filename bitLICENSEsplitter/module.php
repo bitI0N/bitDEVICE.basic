@@ -15,6 +15,8 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('LicenseKey', '');
+        $this->RegisterPropertyString('ServerUrl', '');
+        $this->RegisterPropertyString('TestLicensee', '');
         $this->RegisterPropertyInteger('SimulationTier', 0);
         $this->RegisterTimer('LicenseRevalidation', 0, 'BIT_Revalidate($_IPS[\'TARGET\']);');
 
@@ -49,7 +51,7 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         return match ($action) {
             'GetTier' => json_encode(['tier' => ProLoader::tier()]),
-            'GetStatus' => json_encode((new LicenseManager($this->getDataPath()))->getStatus()),
+            'GetStatus' => json_encode(($this->createLicenseManager())->getStatus()),
             default => json_encode(['error' => 'Unknown action']),
         };
     }
@@ -93,7 +95,7 @@ class bitCONTROLLicense extends IPSModuleStrict
             ]];
         }
 
-        $lm = new LicenseManager($this->getDataPath());
+        $lm = $this->createLicenseManager();
         $status = $lm->getStatus();
         $elements = array_merge($elements, $this->buildStatusElements($status));
         $actions = $this->buildActions($status);
@@ -111,18 +113,22 @@ class bitCONTROLLicense extends IPSModuleStrict
         if ($this->hasSimulator()) {
             require_once __DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php';
             $simTier = $this->ReadPropertyInteger('SimulationTier');
-            SimulationProvider::activate($simTier, $this->getDataPath());
             if ($simTier > 0) {
+                SimulationProvider::activate($simTier, $this->getDataPath());
                 ProLoader::reset();
-                ProLoader::boot($this->getDataPath());
+                ProLoader::boot($this->getDataPath(), true);
                 $this->SetSummary(SimulationProvider::getTierName($simTier) . ' (Sim)');
                 $this->SetStatus(102);
                 $this->SetTimerInterval('LicenseRevalidation', 0);
                 return;
             }
+            if (!$this->hasRealLicense()) {
+                SimulationProvider::deactivate($this->getDataPath()); // @phpstan-ignore staticMethod.notFound
+                ProLoader::reset();
+            }
         }
 
-        $lm = new LicenseManager($this->getDataPath());
+        $lm = $this->createLicenseManager();
         $status = $lm->validate();
 
         match ($status['state']) {
@@ -135,8 +141,25 @@ class bitCONTROLLicense extends IPSModuleStrict
     {
         ProLoader::boot($this->getDataPath());
 
+        // Bind loaded capabilities to the signed token: the package on disk must
+        // not grant a higher tier than the license permits. Blocks unlocking Pro
+        // by dropping fabricated capability files into data/pro/ under a Plus token.
+        $loadedTier = ProLoader::tier();
+        $licensedTier = $status['tier'] ?? 'community';
+        if ($this->tierRank($loadedTier) > $this->tierRank($licensedTier)) {
+            $this->SendDebug('License', sprintf('Tier mismatch: package=%s exceeds license=%s — refusing', $loadedTier, $licensedTier), 0);
+            $this->deactivatePro();
+            return;
+        }
+
         $tier = ProLoader::tier();
-        $this->SetSummary(ucfirst($tier) . ' — active');
+        $lm = $this->createLicenseManager();
+        $fullStatus = $lm->getStatus();
+        $summary = ucfirst($tier);
+        if (!empty($fullStatus['licensee'])) {
+            $summary .= ' (' . $fullStatus['licensee'] . ')';
+        }
+        $this->SetSummary($summary);
         $this->SetStatus(102);
         $this->SetTimerInterval('LicenseRevalidation', self::REVALIDATION_INTERVAL_MS);
 
@@ -154,10 +177,19 @@ class bitCONTROLLicense extends IPSModuleStrict
         $this->SetTimerInterval('LicenseRevalidation', 0);
     }
 
+    private function tierRank(string $tier): int
+    {
+        return match ($tier) {
+            'pro' => 2,
+            'plus' => 1,
+            default => 0,
+        };
+    }
+
     private function handleActivation(string $key): void
     {
-        $lm = new LicenseManager($this->getDataPath());
-        $result = $lm->activate($key, IPS_GetLicensee());
+        $lm = $this->createLicenseManager();
+        $result = $lm->activate($key, $this->getLicensee());
 
         if ($result['success']) {
             ProLoader::reset();
@@ -168,25 +200,25 @@ class bitCONTROLLicense extends IPSModuleStrict
             $this->SetStatus(201);
         }
 
-        echo json_encode($result);
+        $this->ReloadForm();
     }
 
     private function handleDeactivation(): void
     {
-        $lm = new LicenseManager($this->getDataPath());
-        $lm->deactivate();
+        $lm = $this->createLicenseManager();
+        $lm->deactivate($this->getLicensee());
 
         ProLoader::reset();
         $this->deactivatePro();
         $this->SendDebug('License', 'Deactivated', 0);
 
-        echo json_encode(['success' => true]);
+        $this->ReloadForm();
     }
 
     private function handleRevalidation(): void
     {
-        $lm = new LicenseManager($this->getDataPath());
-        $result = $lm->revalidate(IPS_GetLicensee());
+        $lm = $this->createLicenseManager();
+        $result = $lm->revalidate($this->getLicensee());
 
         if (isset($result['success']) && $result['success']) {
             if (!empty($result['update_available'])) {
@@ -194,16 +226,67 @@ class bitCONTROLLicense extends IPSModuleStrict
                 $this->bootLicense();
                 $this->SendDebug('License', 'Updated to new version', 0);
             }
+        } elseif (!empty($result['revoked'])) {
+            ProLoader::reset();
+            $this->deactivatePro();
+            $this->SendDebug('License', 'License revoked by server — downgraded to Community', 0);
         } else {
             $this->SendDebug('License', 'Revalidation failed: ' . ($result['error'] ?? ''), 0);
         }
 
-        echo json_encode($result);
+        $this->ReloadForm();
+    }
+
+    private function hasRealLicense(): bool
+    {
+        return file_exists($this->getDataPath() . '/license.json');
     }
 
     private function getDataPath(): string
     {
         return __DIR__ . '/data';
+    }
+
+    private function getLicensee(): string
+    {
+        $testLicensee = $this->ReadPropertyString('TestLicensee');
+        return $testLicensee !== '' ? $testLicensee : IPS_GetLicensee();
+    }
+
+    private function createLicenseManager(): LicenseManager
+    {
+        $serverUrl = $this->ReadPropertyString('ServerUrl');
+        if ($serverUrl === '') {
+            $serverUrl = $this->getEnv('BITHOME_LICENSE_VALIDATION');
+        }
+        return new LicenseManager(
+            $this->getDataPath(),
+            null,
+            $serverUrl !== '' ? $serverUrl : null,
+            $this->getLicensee()
+        );
+    }
+
+    private function getEnv(string $key): string
+    {
+        $value = getenv($key);
+        if ($value !== false && $value !== '') {
+            return $value;
+        }
+        $envFile = __DIR__ . '/../.env.local';
+        if (!file_exists($envFile)) {
+            return '';
+        }
+        $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (str_starts_with($line, '#')) {
+                continue;
+            }
+            if (str_starts_with($line, $key . '=')) {
+                return substr($line, strlen($key) + 1);
+            }
+        }
+        return '';
     }
 
     private function t(string $s): string
@@ -217,25 +300,40 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         switch ($status['state']) {
             case 'active':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — active', ucfirst($status['tier'] ?? 'community')), 'bold' => true, 'color' => 0x00AA00];
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Licensed to:'), $status['licensee'] ?? '')];
-                if (!empty($status['expires'])) {
-                    $elements[] = ['type' => 'Label', 'caption' => sprintf('%s %s', $this->t('Updates until:'), $status['expires'])];
+                $elements[] = ['type' => 'RowLayout', 'items' => [
+                    ['type' => 'Label', 'caption' => $this->Translate('Active License:'), 'bold' => true, 'width' => '130px'],
+                    ['type' => 'Label', 'caption' => ucfirst($status['tier'] ?? 'community')],
+                ]];
+                if (!empty($status['features'])) {
+                    $elements[] = ['type' => 'RowLayout', 'items' => [
+                        ['type' => 'Label', 'caption' => $this->Translate('Features:'), 'bold' => true, 'width' => '130px'],
+                        ['type' => 'Label', 'caption' => implode(', ', $status['features'])],
+                    ]];
+                }
+                $elements[] = ['type' => 'RowLayout', 'items' => [
+                    ['type' => 'Label', 'caption' => $this->Translate('Licensed to:'), 'bold' => true, 'width' => '130px'],
+                    ['type' => 'Label', 'caption' => $status['licensee'] ?? ''],
+                ]];
+                if (!empty($status['updatesUntil'])) {
+                    $elements[] = ['type' => 'RowLayout', 'items' => [
+                        ['type' => 'Label', 'caption' => $this->Translate('Updates until:'), 'bold' => true, 'width' => '130px'],
+                        ['type' => 'Label', 'caption' => $status['updatesUntil']],
+                    ]];
                 }
                 break;
 
             case 'grace':
-                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %d %s', $this->t('Grace Period'), $status['daysLeft'] ?? 0, $this->t('days remaining')), 'bold' => true, 'color' => 0xCC8800];
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('License server unreachable. Features remain active temporarily.')];
+                $elements[] = ['type' => 'Label', 'caption' => sprintf('%s — %d %s', $this->Translate('Grace Period'), $status['daysLeft'] ?? 0, $this->Translate('days remaining')), 'bold' => true, 'color' => 0xCC8800];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('License server unreachable. Features remain active temporarily.')];
                 break;
 
             case 'expired':
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('License expired — running in Community mode'), 'bold' => true, 'color' => 0xCC0000];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('License expired — running in Community mode'), 'bold' => true, 'color' => 0xCC0000];
                 break;
 
             default:
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('Community Edition'), 'bold' => true];
-                $elements[] = ['type' => 'Label', 'caption' => $this->t('Unlock Formula mode, unlimited triggers and rules, and more.'), 'italic' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('Community Edition'), 'bold' => true];
+                $elements[] = ['type' => 'Label', 'caption' => $this->Translate('Unlock Formula mode, unlimited triggers and rules, and more.'), 'italic' => true];
                 break;
         }
 
@@ -248,15 +346,15 @@ class bitCONTROLLicense extends IPSModuleStrict
 
         if ($status['state'] === 'active') {
             $actions[] = ['type' => 'RowLayout', 'items' => [
-                ['type' => 'Button', 'caption' => $this->t('Check for Updates'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'],
-                ['type' => 'Button', 'caption' => $this->t('Deactivate'), 'onClick' => 'BIT_RequestAction($id, "LicenseDeactivate", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Check for Updates'), 'onClick' => 'IPS_RequestAction($id, "LicenseRefresh", "");'],
+                ['type' => 'Button', 'caption' => $this->t('Deactivate'), 'onClick' => 'IPS_RequestAction($id, "LicenseDeactivate", "");'],
             ]];
         } elseif ($status['state'] === 'grace') {
-            $actions[] = ['type' => 'Button', 'caption' => $this->t('Retry Now'), 'onClick' => 'BIT_RequestAction($id, "LicenseRefresh", "");'];
+            $actions[] = ['type' => 'Button', 'caption' => $this->t('Retry Now'), 'onClick' => 'IPS_RequestAction($id, "LicenseRefresh", "");'];
         } else {
             $actions[] = ['type' => 'RowLayout', 'items' => [
                 ['type' => 'ValidationTextBox', 'name' => 'LicenseKey', 'caption' => $this->t('License Key'), 'width' => '350px'],
-                ['type' => 'Button', 'caption' => $this->t('Activate'), 'onClick' => 'BIT_RequestAction($id, "LicenseActivate", $LicenseKey);'],
+                ['type' => 'Button', 'caption' => $this->t('Activate'), 'onClick' => 'IPS_RequestAction($id, "LicenseActivate", $LicenseKey);'],
             ]];
         }
 
