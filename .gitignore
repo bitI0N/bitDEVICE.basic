@@ -21,6 +21,13 @@ Thumbs.db
 .vscode
 .idea
 Generated\ Files/
+### AGENTS
+.agents/*
+!.agents/agents
+!.agents/skills
+!.agents/hooks
+!.agents/AGENTS.md
+!.agents/settings.json
 ### CLAUDE
 .claude/*
 !.claude/agents
@@ -28,6 +35,15 @@ Generated\ Files/
 !.claude/hooks
 !.claude/CLAUDE.md
 !.claude/settings.json
+### CODEX
+.codex/*
+!.codex/agents
+!.codex/skills
+!.codex/hooks
+!.codex/config.toml
+!.codex/hooks.json
+!.codex/AGENTS.md
+!.codex/settings.json
 .superpowers
 .playwright*
 .taskkey
@@ -77,11 +93,9 @@ StyleCopReport.xml
 ### PHP
 /vendor/
 !/vendor/legion
-!/vendor/bithome
-!/vendor/bitdevice
-/vendor/legion/vendor/
 /vendor/bithome/vendor/
-/vendor/bitdevice/vendor/
+!/vendor/bithome
+/vendor/bithome/vendor/
 .phpunit.result.cache
 .phpunit.cache/
 coverage-*.xml
@@ -92,3 +106,5 @@ __pycache__/
 ### SYMFONY
 /var/
 /config/reference.php
+# Multi-Agent-Symlinks (init-agents.sh) — committebar halten
+!.claude/scripts
