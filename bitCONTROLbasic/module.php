@@ -45,9 +45,6 @@ class bitCONTROL extends IPSModuleStrict
         $this->RegisterAttributeString('CombinedState', '{}');
         $this->RegisterAttributeString('ExpertLastRun', '0');
 
-        // Timer
-        $this->RegisterTimer('EvaluationTimer', 0, 'BIT_Evaluate($_IPS[\'TARGET\']);');
-
         // Variables
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
         $this->RegisterVariableString('ActiveRule', $this->Translate('Active Rule'), '', 1);
