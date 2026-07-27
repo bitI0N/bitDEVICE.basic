@@ -564,9 +564,23 @@ class LicenseManager
         $stagingDir = $this->dataPath . '/pro.staging';
         $backupDir  = $this->dataPath . '/pro.old';
 
+        // Recover from a rotation interrupted between the two renames below
+        // (process killed, OOM, power loss). If `pro` is missing while
+        // `pro.old` exists, `pro.old` is not residue — it is the only
+        // surviving copy of the previously installed package. Restore it
+        // before anything else runs, so a failed or never-retried install
+        // never leaves data/pro/ empty.
+        if (!is_dir($proDir) && is_dir($backupDir)) {
+            @rename($backupDir, $proDir);
+        }
+
         // Clear residue from an earlier run that was interrupted mid-rotation.
+        // `pro.old` is only disposable once `pro` demonstrably exists — either
+        // because it was never touched, or because it was just recovered above.
         $this->removeDirectory($stagingDir);
-        $this->removeDirectory($backupDir);
+        if (is_dir($proDir)) {
+            $this->removeDirectory($backupDir);
+        }
 
         if (!$this->extractToStaging($zipData, $stagingDir)) {
             $this->removeDirectory($stagingDir);
