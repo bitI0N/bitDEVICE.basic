@@ -89,7 +89,7 @@ class LicenseManager
                 return ['success' => false, 'error' => 'Package checksum mismatch.'];
             }
 
-            if (!$this->extractZip($zipData)) {
+            if (!$this->installPackage($zipData)) {
                 return ['success' => false, 'error' => 'Failed to extract license package.'];
             }
         }
@@ -243,8 +243,11 @@ class LicenseManager
             if ($zipData !== null && isset($payload['checksum']) && $payload['checksum'] !== '') {
                 $actualChecksum = 'sha256:' . hash('sha256', $zipData);
                 if (hash_equals($payload['checksum'], $actualChecksum)) {
-                    $this->extractZip($zipData);
-                    $updateAvailable = true;
+                    // Report an update only when one actually landed. Claiming
+                    // success on a failed install hides the failure from the
+                    // module, which would then reboot against a package that
+                    // was never replaced.
+                    $updateAvailable = $this->installPackage($zipData);
                 }
             }
         }
@@ -548,9 +551,56 @@ class LicenseManager
     }
 
     /**
-     * Write ZIP binary to a temp file, extract its contents to data/pro/, and clean up.
+     * Install a downloaded package atomically.
+     *
+     * Extracts to a staging directory first and only promotes it once the
+     * archive is known to be complete and safe. A failure at any stage leaves
+     * the previously installed package exactly as it was — losing paid code
+     * because an update went wrong is worse than not updating.
      */
-    private function extractZip(string $zipData): bool
+    private function installPackage(string $zipData): bool
+    {
+        $proDir     = $this->dataPath . '/pro';
+        $stagingDir = $this->dataPath . '/pro.staging';
+        $backupDir  = $this->dataPath . '/pro.old';
+
+        // Clear residue from an earlier run that was interrupted mid-rotation.
+        $this->removeDirectory($stagingDir);
+        $this->removeDirectory($backupDir);
+
+        if (!$this->extractToStaging($zipData, $stagingDir)) {
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        // Rotate in two steps. rename() onto an existing directory fails on
+        // Windows, which is a supported Symcon target, so the old package is
+        // moved aside before the new one takes its place.
+        if (is_dir($proDir) && !@rename($proDir, $backupDir)) {
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        if (!@rename($stagingDir, $proDir)) {
+            if (is_dir($backupDir)) {
+                @rename($backupDir, $proDir);
+            }
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        $this->removeDirectory($backupDir);
+
+        return true;
+    }
+
+    /**
+     * Extract a package archive into a staging directory.
+     *
+     * Returns false unless every entry is safe, extraction succeeded, and the
+     * result actually looks like a package.
+     */
+    private function extractToStaging(string $zipData, string $stagingDir): bool
     {
         $tmpFile = tempnam(sys_get_temp_dir(), 'bclicense_');
         if ($tmpFile === false) {
@@ -562,17 +612,12 @@ class LicenseManager
                 return false;
             }
 
-            $proDir = $this->dataPath . '/pro';
-            if (is_dir($proDir)) {
-                $this->removeDirectory($proDir);
-            }
-            if (!@mkdir($proDir, 0755, true)) {
+            if (!@mkdir($stagingDir, 0755, true)) {
                 return false;
             }
 
             $zip = new ZipArchive();
-            $result = $zip->open($tmpFile);
-            if ($result !== true) {
+            if ($zip->open($tmpFile) !== true) {
                 return false;
             }
 
@@ -586,10 +631,15 @@ class LicenseManager
                 }
             }
 
-            $extracted = $zip->extractTo($proDir);
+            $extracted = $zip->extractTo($stagingDir);
             $zip->close();
 
-            return $extracted;
+            if (!$extracted) {
+                return false;
+            }
+
+            // A package without its manifest is not usable; refuse to promote it.
+            return is_file($stagingDir . '/manifest.php');
         } finally {
             @unlink($tmpFile);
         }
