@@ -197,13 +197,11 @@ class LicenseManager
             return ['success' => false, 'error' => 'No active license to revalidate.'];
         }
 
-        $installedChecksum = $this->getInstalledChecksum();
-
         $response = $this->httpPost('/revalidate', [
-            'token'              => $state['token'],
-            'licensee'           => $licensee,
-            'module_version'     => $this->getModuleVersion(),
-            'installed_checksum' => $installedChecksum,
+            'token'             => $state['token'],
+            'licensee'          => $licensee,
+            'module_version'    => $this->getModuleVersion(),
+            'installed_version' => $this->getInstalledVersion(),
         ]);
 
         if ($response === null) {
@@ -701,19 +699,23 @@ class LicenseManager
     }
 
     /**
-     * Compute the SHA-256 checksum of the currently installed pro package.
+     * Read the version of the currently installed package.
      *
-     * Falls back to an empty string if no package is installed.
+     * Read from a plain-text VERSION file rather than the packaged config.php:
+     * learning what is installed must never require executing packaged code.
+     *
+     * Returns an empty string when no package is installed.
      */
-    private function getInstalledChecksum(): string
+    private function getInstalledVersion(): string
     {
-        $manifestFile = $this->dataPath . '/pro/manifest.php';
-        if (!file_exists($manifestFile)) {
+        $versionFile = $this->dataPath . '/pro/VERSION';
+        if (!is_file($versionFile)) {
             return '';
         }
 
-        $hash = hash_file('sha256', $manifestFile);
-        return $hash !== false ? $hash : '';
+        $version = file_get_contents($versionFile);
+
+        return $version === false ? '' : trim($version);
     }
 
     /**
