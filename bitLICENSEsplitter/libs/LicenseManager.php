@@ -279,6 +279,14 @@ class LicenseManager
     /**
      * Remove the local license token and downloaded Pro package, without any
      * server notification. Used on deactivation and on server-side revocation.
+     *
+     * Removes every directory that can hold a complete, checksum-verified
+     * copy of the paid package, not just data/pro: an install interrupted
+     * after extractToStaging() succeeded but before rotation leaves
+     * pro.staging populated, and one interrupted after the first rotation
+     * rename leaves pro.old populated (see installPackage()). Either would
+     * otherwise survive a revocation with the full obfuscated Pro code
+     * intact.
      */
     private function clearLocalLicense(): void
     {
@@ -287,9 +295,11 @@ class LicenseManager
             @unlink($licenseFile);
         }
 
-        $proDir = $this->dataPath . '/pro';
-        if (is_dir($proDir)) {
-            $this->removeDirectory($proDir);
+        foreach (['/pro', '/pro.staging', '/pro.old'] as $dir) {
+            $path = $this->dataPath . $dir;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            }
         }
     }
 
