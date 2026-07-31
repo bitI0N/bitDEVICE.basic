@@ -79,6 +79,11 @@ bld/
 .env.*.local
 ### TEST
 [Tt]est[-_\.]*[Rr]esult*/
+### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
+dast-results/
+load-test-results/
+container-security-results/
+build/verify-status/
 [Bb]uild[Ll]og.*
 *.VisualState.xml
 TestResult.xml
