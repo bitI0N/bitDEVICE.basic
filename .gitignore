@@ -80,6 +80,7 @@ bld/
 ### TEST
 [Tt]est[-_\.]*[Rr]esult*/
 ### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
+.scannerwork/
 dast-results/
 load-test-results/
 container-security-results/
