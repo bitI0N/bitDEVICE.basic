@@ -82,6 +82,9 @@ bld/
 ### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
 .scannerwork/
 infection.phar
+# build/ itself is tracked (config.json, yakpro-po.cnf, stubs) — only the
+# generated tier packages are not.
+build/dist/
 dast-results/
 load-test-results/
 container-security-results/
