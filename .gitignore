@@ -79,6 +79,16 @@ bld/
 .env.*.local
 ### TEST
 [Tt]est[-_\.]*[Rr]esult*/
+### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
+.scannerwork/
+infection.phar
+# build/ itself is tracked (config.json, yakpro-po.cnf, stubs) — only the
+# generated tier packages are not.
+build/dist/
+dast-results/
+load-test-results/
+container-security-results/
+build/verify-status/
 [Bb]uild[Ll]og.*
 *.VisualState.xml
 TestResult.xml
@@ -108,3 +118,6 @@ __pycache__/
 /config/reference.php
 # Multi-Agent-Symlinks (init-agents.sh) — committebar halten
 !.claude/scripts
+
+### PHP-CS-Fixer local cache
+.php-cs-fixer.cache

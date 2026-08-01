@@ -89,7 +89,7 @@ class LicenseManager
                 return ['success' => false, 'error' => 'Package checksum mismatch.'];
             }
 
-            if (!$this->extractZip($zipData)) {
+            if (!$this->installPackage($zipData)) {
                 return ['success' => false, 'error' => 'Failed to extract license package.'];
             }
         }
@@ -197,13 +197,11 @@ class LicenseManager
             return ['success' => false, 'error' => 'No active license to revalidate.'];
         }
 
-        $installedChecksum = $this->getInstalledChecksum();
-
         $response = $this->httpPost('/revalidate', [
-            'token'              => $state['token'],
-            'licensee'           => $licensee,
-            'module_version'     => $this->getModuleVersion(),
-            'installed_checksum' => $installedChecksum,
+            'token'             => $state['token'],
+            'licensee'          => $licensee,
+            'module_version'    => $this->getModuleVersion(),
+            'installed_version' => $this->getInstalledVersion(),
         ]);
 
         if ($response === null) {
@@ -243,8 +241,11 @@ class LicenseManager
             if ($zipData !== null && isset($payload['checksum']) && $payload['checksum'] !== '') {
                 $actualChecksum = 'sha256:' . hash('sha256', $zipData);
                 if (hash_equals($payload['checksum'], $actualChecksum)) {
-                    $this->extractZip($zipData);
-                    $updateAvailable = true;
+                    // Report an update only when one actually landed. Claiming
+                    // success on a failed install hides the failure from the
+                    // module, which would then reboot against a package that
+                    // was never replaced.
+                    $updateAvailable = $this->installPackage($zipData);
                 }
             }
         }
@@ -278,6 +279,14 @@ class LicenseManager
     /**
      * Remove the local license token and downloaded Pro package, without any
      * server notification. Used on deactivation and on server-side revocation.
+     *
+     * Removes every directory that can hold a complete, checksum-verified
+     * copy of the paid package, not just data/pro: an install interrupted
+     * after extractToStaging() succeeded but before rotation leaves
+     * pro.staging populated, and one interrupted after the first rotation
+     * rename leaves pro.old populated (see installPackage()). Either would
+     * otherwise survive a revocation with the full obfuscated Pro code
+     * intact.
      */
     private function clearLocalLicense(): void
     {
@@ -286,9 +295,11 @@ class LicenseManager
             @unlink($licenseFile);
         }
 
-        $proDir = $this->dataPath . '/pro';
-        if (is_dir($proDir)) {
-            $this->removeDirectory($proDir);
+        foreach (['/pro', '/pro.staging', '/pro.old'] as $dir) {
+            $path = $this->dataPath . $dir;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            }
         }
     }
 
@@ -548,9 +559,70 @@ class LicenseManager
     }
 
     /**
-     * Write ZIP binary to a temp file, extract its contents to data/pro/, and clean up.
+     * Install a downloaded package atomically.
+     *
+     * Extracts to a staging directory first and only promotes it once the
+     * archive is known to be complete and safe. A failure at any stage leaves
+     * the previously installed package exactly as it was — losing paid code
+     * because an update went wrong is worse than not updating.
      */
-    private function extractZip(string $zipData): bool
+    private function installPackage(string $zipData): bool
+    {
+        $proDir     = $this->dataPath . '/pro';
+        $stagingDir = $this->dataPath . '/pro.staging';
+        $backupDir  = $this->dataPath . '/pro.old';
+
+        // Recover from a rotation interrupted between the two renames below
+        // (process killed, OOM, power loss). If `pro` is missing while
+        // `pro.old` exists, `pro.old` is not residue — it is the only
+        // surviving copy of the previously installed package. Restore it
+        // before anything else runs, so a failed or never-retried install
+        // never leaves data/pro/ empty.
+        if (!is_dir($proDir) && is_dir($backupDir)) {
+            @rename($backupDir, $proDir);
+        }
+
+        // Clear residue from an earlier run that was interrupted mid-rotation.
+        // `pro.old` is only disposable once `pro` demonstrably exists — either
+        // because it was never touched, or because it was just recovered above.
+        $this->removeDirectory($stagingDir);
+        if (is_dir($proDir)) {
+            $this->removeDirectory($backupDir);
+        }
+
+        if (!$this->extractToStaging($zipData, $stagingDir)) {
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        // Rotate in two steps. rename() onto an existing directory fails on
+        // Windows, which is a supported Symcon target, so the old package is
+        // moved aside before the new one takes its place.
+        if (is_dir($proDir) && !@rename($proDir, $backupDir)) {
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        if (!@rename($stagingDir, $proDir)) {
+            if (is_dir($backupDir)) {
+                @rename($backupDir, $proDir);
+            }
+            $this->removeDirectory($stagingDir);
+            return false;
+        }
+
+        $this->removeDirectory($backupDir);
+
+        return true;
+    }
+
+    /**
+     * Extract a package archive into a staging directory.
+     *
+     * Returns false unless every entry is safe, extraction succeeded, and the
+     * result actually looks like a package.
+     */
+    private function extractToStaging(string $zipData, string $stagingDir): bool
     {
         $tmpFile = tempnam(sys_get_temp_dir(), 'bclicense_');
         if ($tmpFile === false) {
@@ -562,17 +634,12 @@ class LicenseManager
                 return false;
             }
 
-            $proDir = $this->dataPath . '/pro';
-            if (is_dir($proDir)) {
-                $this->removeDirectory($proDir);
-            }
-            if (!@mkdir($proDir, 0755, true)) {
+            if (!@mkdir($stagingDir, 0755, true)) {
                 return false;
             }
 
             $zip = new ZipArchive();
-            $result = $zip->open($tmpFile);
-            if ($result !== true) {
+            if ($zip->open($tmpFile) !== true) {
                 return false;
             }
 
@@ -586,10 +653,15 @@ class LicenseManager
                 }
             }
 
-            $extracted = $zip->extractTo($proDir);
+            $extracted = $zip->extractTo($stagingDir);
             $zip->close();
 
-            return $extracted;
+            if (!$extracted) {
+                return false;
+            }
+
+            // A package without its manifest is not usable; refuse to promote it.
+            return is_file($stagingDir . '/manifest.php');
         } finally {
             @unlink($tmpFile);
         }
@@ -637,19 +709,23 @@ class LicenseManager
     }
 
     /**
-     * Compute the SHA-256 checksum of the currently installed pro package.
+     * Read the version of the currently installed package.
      *
-     * Falls back to an empty string if no package is installed.
+     * Read from a plain-text VERSION file rather than the packaged config.php:
+     * learning what is installed must never require executing packaged code.
+     *
+     * Returns an empty string when no package is installed.
      */
-    private function getInstalledChecksum(): string
+    private function getInstalledVersion(): string
     {
-        $manifestFile = $this->dataPath . '/pro/manifest.php';
-        if (!file_exists($manifestFile)) {
+        $versionFile = $this->dataPath . '/pro/VERSION';
+        if (!is_file($versionFile)) {
             return '';
         }
 
-        $hash = hash_file('sha256', $manifestFile);
-        return $hash !== false ? $hash : '';
+        $version = file_get_contents($versionFile);
+
+        return $version === false ? '' : trim($version);
     }
 
     /**
