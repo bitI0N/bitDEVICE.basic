@@ -81,6 +81,7 @@ bld/
 [Tt]est[-_\.]*[Rr]esult*/
 ### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
 .scannerwork/
+infection.phar
 dast-results/
 load-test-results/
 container-security-results/
