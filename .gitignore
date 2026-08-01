@@ -115,3 +115,6 @@ __pycache__/
 /config/reference.php
 # Multi-Agent-Symlinks (init-agents.sh) — committebar halten
 !.claude/scripts
+
+### PHP-CS-Fixer local cache
+.php-cs-fixer.cache
