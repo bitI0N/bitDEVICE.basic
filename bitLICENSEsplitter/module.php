@@ -16,17 +16,10 @@ class bitCONTROLLicense extends IPSModuleStrict
         $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('LicenseKey', '');
         $this->RegisterPropertyString('ServerUrl', '');
-        $this->RegisterPropertyString('TestLicensee', '');
-        $this->RegisterPropertyInteger('SimulationTier', 0);
         $this->RegisterTimer('LicenseRevalidation', 0, 'BIT_Revalidate($_IPS[\'TARGET\']);');
 
         $this->RegisterVariableBoolean('Active', $this->Translate('Active'), '~Switch', 0);
         $this->EnableAction('Active');
-    }
-
-    private function hasSimulator(): bool
-    {
-        return file_exists(__DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php');
     }
 
     public function ApplyChanges(): void
@@ -87,14 +80,6 @@ class bitCONTROLLicense extends IPSModuleStrict
             ['type' => 'CheckBox', 'name' => 'Active', 'caption' => $this->t('Active')],
         ];
 
-        if ($this->hasSimulator()) {
-            $elements[] = ['type' => 'Select', 'name' => 'SimulationTier', 'caption' => $this->t('Simulation'), 'options' => [
-                ['caption' => '— ' . $this->t('disabled') . ' —', 'value' => 0],
-                ['caption' => 'Plus', 'value' => 1],
-                ['caption' => 'Pro', 'value' => 2],
-            ]];
-        }
-
         $lm = $this->createLicenseManager();
         $status = $lm->getStatus();
         $elements = array_merge($elements, $this->buildStatusElements($status));
@@ -110,24 +95,6 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function bootLicense(): void
     {
-        if ($this->hasSimulator()) {
-            require_once __DIR__ . '/../bitLICENSEsimulator/SimulationProvider.php';
-            $simTier = $this->ReadPropertyInteger('SimulationTier');
-            if ($simTier > 0) {
-                SimulationProvider::activate($simTier, $this->getDataPath());
-                ProLoader::reset();
-                ProLoader::boot($this->getDataPath(), true);
-                $this->SetSummary(SimulationProvider::getTierName($simTier) . ' (Sim)');
-                $this->SetStatus(102);
-                $this->SetTimerInterval('LicenseRevalidation', 0);
-                return;
-            }
-            if (!$this->hasRealLicense()) {
-                SimulationProvider::deactivate($this->getDataPath()); // @phpstan-ignore staticMethod.notFound
-                ProLoader::reset();
-            }
-        }
-
         $lm = $this->createLicenseManager();
         $status = $lm->validate();
 
@@ -237,11 +204,6 @@ class bitCONTROLLicense extends IPSModuleStrict
         $this->ReloadForm();
     }
 
-    private function hasRealLicense(): bool
-    {
-        return file_exists($this->getDataPath() . '/license.json');
-    }
-
     private function getDataPath(): string
     {
         return __DIR__ . '/data';
@@ -249,8 +211,7 @@ class bitCONTROLLicense extends IPSModuleStrict
 
     private function getLicensee(): string
     {
-        $testLicensee = $this->ReadPropertyString('TestLicensee');
-        return $testLicensee !== '' ? $testLicensee : IPS_GetLicensee();
+        return IPS_GetLicensee();
     }
 
     private function createLicenseManager(): LicenseManager
