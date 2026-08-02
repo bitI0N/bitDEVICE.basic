@@ -130,3 +130,4 @@ __pycache__/
 ### PHP-CS-Fixer local cache
 .php-cs-fixer.cache
 build/.e2e-server-key.pub
+build/symcon-license/
