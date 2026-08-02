@@ -115,6 +115,10 @@ class bitCONTROLLicense extends IPSModuleStrict
         $licensedTier = $status['tier'] ?? 'community';
         if ($this->tierRank($loadedTier) > $this->tierRank($licensedTier)) {
             $this->SendDebug('License', sprintf('Tier mismatch: package=%s exceeds license=%s — refusing', $loadedTier, $licensedTier), 0);
+            // Withdraw the package itself, not just the in-process registry:
+            // resetting statics alone left data/pro/ in place for the next
+            // boot() to load again.
+            $this->createLicenseManager()->removeProPackage();
             $this->deactivatePro();
             return;
         }
@@ -174,6 +178,7 @@ class bitCONTROLLicense extends IPSModuleStrict
     {
         $lm = $this->createLicenseManager();
         $lm->deactivate($this->getLicensee());
+        $lm->removeProPackage();
 
         ProLoader::reset();
         $this->deactivatePro();

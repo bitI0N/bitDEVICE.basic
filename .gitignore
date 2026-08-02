@@ -110,6 +110,8 @@ StyleCopReport.xml
 .phpunit.cache/
 coverage-*.xml
 cov-*.xml
+# The exact name the local coverage command in .wiki/pipeline/AGENTS.md writes.
+cov.xml
 ### PYTHON
 __pycache__/
 *.pyc

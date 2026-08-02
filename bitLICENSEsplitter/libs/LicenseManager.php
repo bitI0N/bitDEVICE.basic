@@ -304,6 +304,27 @@ class LicenseManager
     }
 
     /**
+     * Remove the installed paid package without touching the token.
+     *
+     * Used by explicit user deactivation and by the tier-mismatch refusal.
+     * Both previously cleared in-process statics only, so the very next
+     * boot() re-loaded exactly what had just been withdrawn.
+     *
+     * Safe under the perpetual model: this never runs on expiry. Removal
+     * happens only on explicit revocation, user deactivation, or a detected
+     * mismatch.
+     */
+    public function removeProPackage(): void
+    {
+        foreach (['/pro', '/pro.staging', '/pro.old'] as $dir) {
+            $path = $this->dataPath . $dir;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            }
+        }
+    }
+
+    /**
      * Return a high-level status array suitable for UI display.
      *
      * @return array{state: string, tier: string, licensee: string, expires: string|null, daysLeft: int|null}
