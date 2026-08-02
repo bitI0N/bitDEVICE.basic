@@ -114,6 +114,10 @@ cov-*.xml
 cov.xml
 # JUnit reports the integration/abuse runners write to the project root for ADO.
 junit-*.xml
+# E2E signing keypair, generated per run by e2e/trust-test-key.sh. A private key
+# in the repository would be an entitlement backdoor, not a fixture.
+build/e2e-signing.pem
+build/e2e-signing.pem.pub
 ### PYTHON
 __pycache__/
 *.pyc
