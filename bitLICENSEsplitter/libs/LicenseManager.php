@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../bitCONTROLbasic/libs/TokenVerifier.php';
+
 class LicenseManager
 {
     private string $dataPath;
-    private string $keysPath;
     private string $serverUrl;
     private ?string $licensee;
 
@@ -25,7 +26,6 @@ class LicenseManager
     public function __construct(string $dataPath, ?callable $httpTransport = null, ?string $serverUrl = null, ?string $licensee = null)
     {
         $this->dataPath = $dataPath;
-        $this->keysPath = dirname($dataPath) . '/libs/keys';
         $this->serverUrl = $serverUrl ?? self::DEFAULT_SERVER_URL;
         $this->httpTransport = $httpTransport;
         $this->licensee = $licensee;
@@ -343,96 +343,15 @@ class LicenseManager
     /**
      * Verify a JWT RS256 token and return its decoded payload, or null on failure.
      *
+     * Delegates to TokenVerifier, which pins the public key in source. Reading
+     * it from libs/keys/<kid>.pub made forgery a matter of overwriting one file
+     * (finding C); there is no longer a file to overwrite.
+     *
      * @return array<string, mixed>|null
      */
     private function verifyToken(string $token): ?array
     {
-        $parts = explode('.', $token);
-        if (count($parts) !== 3) {
-            return null;
-        }
-
-        [$headerB64, $payloadB64, $signatureB64] = $parts;
-
-        $headerJson = $this->base64UrlDecode($headerB64);
-        if ($headerJson === false) {
-            return null;
-        }
-
-        $header = json_decode($headerJson, true);
-        if (!is_array($header)) {
-            return null;
-        }
-
-        $alg = $header['alg'] ?? '';
-        if ($alg !== 'RS256') {
-            return null;
-        }
-
-        $kid    = $header['kid'] ?? 'default';
-        $pubKey = $this->loadPublicKey((string) $kid);
-        if ($pubKey === false) {
-            return null;
-        }
-
-        $signingInput = $headerB64 . '.' . $payloadB64;
-
-        $signatureRaw = $this->base64UrlDecode($signatureB64);
-        if ($signatureRaw === false) {
-            return null;
-        }
-
-        $result = openssl_verify($signingInput, $signatureRaw, $pubKey, OPENSSL_ALGO_SHA256);
-        if ($result !== 1) {
-            return null;
-        }
-
-        $payloadJson = $this->base64UrlDecode($payloadB64);
-        if ($payloadJson === false) {
-            return null;
-        }
-
-        $payload = json_decode($payloadJson, true);
-        if (!is_array($payload)) {
-            return null;
-        }
-
-        // Runtime binding: a token is only valid on the instance it was issued
-        // for. Reject a token whose subject does not match the expected licensee
-        // (prevents copying data/license.json to another Symcon installation).
-        if ($this->licensee !== null && ($payload['sub'] ?? null) !== $this->licensee) {
-            return null;
-        }
-
-        return $payload;
-    }
-
-    /**
-     * Load a PEM public key for the given key ID.
-     *
-     * The key file must exist at keys/<kid>.pub. Resolution is strict: the kid
-     * from the token header selects exactly one key. There is deliberately no
-     * "newest available key" fallback — during key rotation the client ships the
-     * current and predecessor keys, and a token must be verified against the key
-     * its kid names (or rejected).
-     *
-     * @return string|false  PEM string or false if the kid is unknown
-     */
-    private function loadPublicKey(string $kid): string|false
-    {
-        // Sanitise kid to prevent path traversal.
-        $safekid = preg_replace('/[^a-zA-Z0-9\-_.]/', '', $kid);
-        if ($safekid === '') {
-            return false;
-        }
-
-        $keyFile = $this->keysPath . '/' . $safekid . '.pub';
-        if (!is_file($keyFile)) {
-            return false;
-        }
-
-        $pem = file_get_contents($keyFile);
-        return $pem !== false ? $pem : false;
+        return TokenVerifier::verify($token, $this->licensee);
     }
 
     /**
@@ -758,21 +677,4 @@ class LicenseManager
         @rmdir($dir);
     }
 
-    /**
-     * Decode a base64url-encoded string.
-     *
-     * JWT uses base64url (RFC 4648 §5): '+' → '-', '/' → '_', no padding.
-     *
-     * @return string|false
-     */
-    private function base64UrlDecode(string $input): string|false
-    {
-        $remainder = strlen($input) % 4;
-        if ($remainder !== 0) {
-            $input .= str_repeat('=', 4 - $remainder);
-        }
-
-        $decoded = base64_decode(strtr($input, '-_', '+/'), true);
-        return $decoded;
-    }
 }
