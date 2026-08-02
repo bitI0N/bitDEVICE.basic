@@ -112,6 +112,8 @@ coverage-*.xml
 cov-*.xml
 # The exact name the local coverage command in .wiki/pipeline/AGENTS.md writes.
 cov.xml
+# JUnit reports the integration/abuse runners write to the project root for ADO.
+junit-*.xml
 ### PYTHON
 __pycache__/
 *.pyc
