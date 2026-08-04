@@ -39,8 +39,8 @@ class ProLoader
     /**
      * The Symcon licence this installation runs under.
      *
-     * Read here rather than passed in: an injectable licensee would be exactly
-     * the seam that TestLicensee was.
+     * Read here rather than passed in: an injectable licensee would re-create
+     * the overridable-identity seam that spec §2 removed (finding B).
      */
     private static function currentLicensee(): string
     {
