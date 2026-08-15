@@ -635,17 +635,39 @@ class LicenseManager
     }
 
     /**
-     * Read the module version from module.json.
+     * Read the released version of this library from library.json.
+     *
+     * It used to read module.json, which has no version field: Symcon's
+     * module.json is specified as id/name/type/vendor/aliases/url/
+     * parentRequirements/childRequirements/implemented/prefix and nothing else.
+     * The `?? '0.0.0'` therefore fired on every installation, and 0.0.0 is what
+     * every activation recorded and every expired licence locked to. The
+     * version lives in library.json, one level above the module directory —
+     * dataPath is <library>/<module>/data, hence dirname(..., 2).
+     *
+     * Returns '' when it cannot be determined. Not '0.0.0': an unreadable
+     * manifest must not be indistinguishable from a genuine release, which is
+     * exactly how this went unnoticed. The server already normalises a missing
+     * module_version to ''.
      */
     private function getModuleVersion(): string
     {
-        $moduleJson = dirname($this->dataPath) . '/module.json';
-        if (!file_exists($moduleJson)) {
-            return '0.0.0';
+        $libraryJson = dirname($this->dataPath, 2) . '/library.json';
+        if (!is_file($libraryJson)) {
+            return '';
         }
 
-        $data = json_decode((string) file_get_contents($moduleJson), true);
-        return is_array($data) ? ($data['version'] ?? '0.0.0') : '0.0.0';
+        $raw = file_get_contents($libraryJson);
+        if ($raw === false) {
+            return '';
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data) || !isset($data['version']) || !is_string($data['version'])) {
+            return '';
+        }
+
+        return trim($data['version']);
     }
 
     /**
