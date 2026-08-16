@@ -38,6 +38,8 @@ class bitCONTROL extends IPSModuleStrict
         $this->RegisterPropertyBoolean('CombinedSkipHeatup', false);
         $this->RegisterPropertyBoolean('CombinedSkipCooldown', false);
         $this->RegisterPropertyBoolean('CombinedSkipInterval', false);
+        $this->RegisterPropertyInteger('TimingPollSeconds', 1);
+        $this->RegisterPropertyInteger('TimingPollUnit', 60);
 
         // Attributes
         $this->RegisterAttributeString('RuleState', '{}');
@@ -184,7 +186,7 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        $triggerManager->applyTriggers($triggers);
+        $triggerManager->applyTriggers($triggers, $this->timingPollSeconds());
 
         foreach ($triggers as $trigger) {
             $variableID = $trigger['variableID'] ?? 0;
@@ -201,6 +203,21 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         $this->pruneOrphanedState($mode);
+
+        if ($triggerManager->hasTimingEvents()) {
+            $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+            $heatup = $cooldown = false;
+            foreach ($state as $key => $value) {
+                if ($value !== 0 && str_starts_with($key, 'HeatupStart_')) {
+                    $heatup = true;
+                }
+                if ($value !== 0 && str_starts_with($key, 'CooldownStart_')) {
+                    $cooldown = true;
+                }
+            }
+            $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $heatup);
+            $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $cooldown);
+        }
 
         if ($mode === 3) {
             $this->syncCombinedOrder();
@@ -223,11 +240,30 @@ class bitCONTROL extends IPSModuleStrict
         }
     }
 
+    /** @var array{heatup: bool, cooldown: bool} */
+    private array $pendingPhases = ['heatup' => false, 'cooldown' => false];
+
     public function Evaluate(): bool
+    {
+        return $this->runEvaluation(false);
+    }
+
+    /**
+     * Poll entry point of BIT_Heatup / BIT_Cooldown: same flow as Evaluate(),
+     * but only transitions caused by elapsed time execute actions.
+     */
+    public function EvaluateTiming(): bool
+    {
+        return $this->runEvaluation(true);
+    }
+
+    private function runEvaluation(bool $timingOnly): bool
     {
         if (!$this->ReadPropertyBoolean('Active')) {
             return false;
         }
+
+        $this->pendingPhases = ['heatup' => false, 'cooldown' => false];
 
         $triggers = $this->getAllTriggers();
         $triggerManager = new TriggerManager($this->InstanceID);
@@ -236,18 +272,37 @@ class bitCONTROL extends IPSModuleStrict
         $this->ensureProLoader();
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
-            0 => $this->evaluateRules(),
-            1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap) : $this->featureUnavailable('Formula', 'Plus'),
-            2 => ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro'),
-            3 => ProLoader::has('combined') ? $this->evaluateCombined($aliasMap) : $this->featureUnavailable('Combined', 'Pro'),
+            0 => $this->evaluateRules($timingOnly),
+            1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap, $timingOnly) : $this->featureUnavailable('Formula', 'Plus'),
+            2 => $timingOnly ? null : (ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro')),
+            3 => ProLoader::has('combined') ? $this->evaluateCombined($aliasMap, $timingOnly) : $this->featureUnavailable('Combined', 'Pro'),
             default => null,
         };
 
+        $this->syncTimingEvents($triggerManager);
+
         $this->SetValue('LastEvaluation', time());
-        $this->SetValue('ActiveRule', $result ?? '');
-        $this->SendDebug('Evaluate', $result ?? 'no result', 0);
+        if (!$timingOnly) {
+            $this->SetValue('ActiveRule', $result ?? '');
+        }
+        $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', $result ?? 'no result', 0);
 
         return true;
+    }
+
+    private function mergePending(array $phases): void
+    {
+        $this->pendingPhases['heatup']   = $this->pendingPhases['heatup'] || !empty($phases['heatup']);
+        $this->pendingPhases['cooldown'] = $this->pendingPhases['cooldown'] || !empty($phases['cooldown']);
+    }
+
+    private function syncTimingEvents(TriggerManager $triggerManager): void
+    {
+        if (!$triggerManager->hasTimingEvents()) {
+            return;
+        }
+        $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $this->pendingPhases['heatup']);
+        $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $this->pendingPhases['cooldown']);
     }
 
     public function GetActiveRule(): string
@@ -342,7 +397,7 @@ class bitCONTROL extends IPSModuleStrict
         return json_encode($form);
     }
 
-    private function evaluateRules(): ?string
+    private function evaluateRules(bool $timingOnly = false): ?string
     {
         $rules          = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('RuleEvaluation');
@@ -351,10 +406,10 @@ class bitCONTROL extends IPSModuleStrict
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipInterval');
 
-        return $this->runRuleEvaluator($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'rule');
+        return $this->runRuleEvaluator($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'rule', $timingOnly);
     }
 
-    private function runRuleEvaluator(array $rules, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    private function runRuleEvaluator(array $rules, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource, bool $timingOnly = false): ?string
     {
         $readState = fn (string $key): int => $this->readState($stateSource, $key);
         $writeState = function (string $key, int $value) use ($stateSource): void {
@@ -362,11 +417,12 @@ class bitCONTROL extends IPSModuleStrict
         };
 
         $evaluator = new RuleEvaluator($this->InstanceID, $readState, $writeState);
-
-        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'));
+        $result = $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'), $timingOnly);
+        $this->mergePending($evaluator->getPendingPhases());
+        return $result;
     }
 
-    private function evaluateFormulas(array $aliasMap): ?string
+    private function evaluateFormulas(array $aliasMap, bool $timingOnly = false): ?string
     {
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('FormulaEvaluation');
@@ -375,10 +431,10 @@ class bitCONTROL extends IPSModuleStrict
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipInterval');
 
-        return $this->runFormulaEvaluator($formulaOutputs, $aliasMap, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'formula');
+        return $this->runFormulaEvaluator($formulaOutputs, $aliasMap, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'formula', $timingOnly);
     }
 
-    private function runFormulaEvaluator(array $formulaOutputs, array $aliasMap, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    private function runFormulaEvaluator(array $formulaOutputs, array $aliasMap, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource, bool $timingOnly = false): ?string
     {
         $isFirstMatch = $evaluationMode === 0;
 
@@ -421,8 +477,16 @@ class bitCONTROL extends IPSModuleStrict
 
             if ($conditionsMet) {
                 $heatupStatus = $timing->checkHeatup($stateKey, $delaySeconds);
-                if ($heatupStatus !== 'passed') {
+                if (!TimingEvaluator::isHeatupPassed($heatupStatus)) {
                     if ($isFirstMatch && !$skipHeatup) {
+                        break;
+                    }
+                    continue;
+                }
+
+                if ($timingOnly && $heatupStatus !== 'elapsed') {
+                    // Poll: nur der Vorlauf-Ablauf schreibt; die Formel bleibt sonst unangetastet.
+                    if ($isFirstMatch) {
                         break;
                     }
                     continue;
@@ -433,7 +497,7 @@ class bitCONTROL extends IPSModuleStrict
                 $timing->cancelHeatup($stateKey, $heatupReset);
                 $cooldownStatus = $timing->checkCooldown($stateKey, $cooldownSeconds);
 
-                if ($cooldownStatus === 'started' || $cooldownStatus === 'active') {
+                if (!TimingEvaluator::isCooldownOver($cooldownStatus)) {
                     if ($skipCooldown) {
                         continue;
                     }
@@ -443,25 +507,24 @@ class bitCONTROL extends IPSModuleStrict
                     continue;
                 }
 
-                if ($cooldownStatus === 'expired') {
-                    $timing->markInactive($stateKey);
-                    $fallbackFormula = (ProLoader::has('limiter') && !empty($output['fallbackFormulaEnabled'])) ? ($output['fallbackFormula'] ?? '') : '';
-                    if ($fallbackFormula !== '' && $variableID > 0) {
-                        $evalMap = array_merge($aliasMap, $computedOutputs);
-                        if ($alias !== '' && IPS_VariableExists($variableID)) {
-                            $evalMap[$alias] = GetValue($variableID);
-                        }
-                        try {
-                            $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
-                            $this->writeOutput($variableID, $fallbackResult);
-                        } catch (\Throwable $e) {
-                            IPS_LogMessage('bitCONTROL', sprintf(
-                                'Instance %d: Fallback formula failed for "%s": %s',
-                                $this->InstanceID,
-                                $alias ?: (string)$variableID,
-                                $e->getMessage()
-                            ));
-                        }
+                $timing->markInactive($stateKey);
+                $mayFallback = !$timingOnly || $cooldownStatus === 'elapsed';
+                $fallbackFormula = ($mayFallback && ProLoader::has('limiter') && !empty($output['fallbackFormulaEnabled'])) ? ($output['fallbackFormula'] ?? '') : '';
+                if ($fallbackFormula !== '' && $variableID > 0) {
+                    $evalMap = array_merge($aliasMap, $computedOutputs);
+                    if ($alias !== '' && IPS_VariableExists($variableID)) {
+                        $evalMap[$alias] = GetValue($variableID);
+                    }
+                    try {
+                        $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
+                        $this->writeOutput($variableID, $fallbackResult);
+                    } catch (\Throwable $e) {
+                        IPS_LogMessage('bitCONTROL', sprintf(
+                            'Instance %d: Fallback formula failed for "%s": %s',
+                            $this->InstanceID,
+                            $alias ?: (string)$variableID,
+                            $e->getMessage()
+                        ));
                     }
                 }
                 continue;
@@ -495,6 +558,8 @@ class bitCONTROL extends IPSModuleStrict
                 break;
             }
         }
+
+        $this->mergePending($timing->getPendingPhases());
 
         return !empty($results) ? implode(', ', $results) : null;
     }
@@ -549,7 +614,7 @@ class bitCONTROL extends IPSModuleStrict
         }
     }
 
-    private function evaluateCombined(array $aliasMap): ?string
+    private function evaluateCombined(array $aliasMap, bool $timingOnly = false): ?string
     {
         $combinedOrder  = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('CombinedEvaluation');
@@ -571,7 +636,7 @@ class bitCONTROL extends IPSModuleStrict
             $index = (int)$indexStr;
 
             if ($type === 'rule' && isset($rules[$index])) {
-                $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined', $timingOnly);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
@@ -579,7 +644,7 @@ class bitCONTROL extends IPSModuleStrict
                     }
                 }
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined', $timingOnly);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
@@ -667,6 +732,23 @@ class bitCONTROL extends IPSModuleStrict
     private function ensureProLoader(): void
     {
         ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
+    }
+
+    private function timingPollSeconds(): int
+    {
+        if (!ProLoader::has('timing')) {
+            return 0;
+        }
+        return max(0, $this->ReadPropertyInteger('TimingPollSeconds')) * max(1, $this->ReadPropertyInteger('TimingPollUnit'));
+    }
+
+    private function stateAttributeForMode(int $mode): string
+    {
+        return match ($mode) {
+            1 => 'FormulaState',
+            3 => 'CombinedState',
+            default => 'RuleState',
+        };
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
@@ -1186,7 +1268,7 @@ class bitCONTROL extends IPSModuleStrict
 
     private function pruneStateKeys(array $state, array $validKeys): array
     {
-        $prefixes = ['HeatupStart_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
+        $prefixes = ['HeatupStart_', 'HeatupDone_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
         $pruned = [];
 
         foreach ($state as $key => $value) {
