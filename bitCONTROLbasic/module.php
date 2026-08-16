@@ -204,19 +204,16 @@ class bitCONTROL extends IPSModuleStrict
 
         $this->pruneOrphanedState($mode);
 
-        if ($triggerManager->hasTimingEvents()) {
+        if ($mode !== 2 && $triggerManager->hasTimingEvents()) {
             $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
-            $heatup = $cooldown = false;
+            $heatup = false;
             foreach ($state as $key => $value) {
-                if ($value !== 0 && str_starts_with($key, 'HeatupStart_')) {
+                if ((int)$value !== 0 && str_starts_with($key, 'HeatupStart_')) {
                     $heatup = true;
-                }
-                if ($value !== 0 && str_starts_with($key, 'CooldownStart_')) {
-                    $cooldown = true;
                 }
             }
             $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $heatup);
-            $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $cooldown);
+            $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $this->stateHasRunningCooldown($mode));
         }
 
         if ($mode === 3) {
@@ -279,7 +276,7 @@ class bitCONTROL extends IPSModuleStrict
             default => null,
         };
 
-        $this->syncTimingEvents($triggerManager);
+        $this->syncTimingEvents($triggerManager, $mode);
 
         $this->SetValue('LastEvaluation', time());
         if (!$timingOnly) {
@@ -296,13 +293,20 @@ class bitCONTROL extends IPSModuleStrict
         $this->pendingPhases['cooldown'] = $this->pendingPhases['cooldown'] || !empty($phases['cooldown']);
     }
 
-    private function syncTimingEvents(TriggerManager $triggerManager): void
+    private function syncTimingEvents(TriggerManager $triggerManager, int $mode): void
     {
+        if (!ProLoader::has('timing')) {
+            return;
+        }
+        if ($mode === 2) {
+            return;
+        }
         if (!$triggerManager->hasTimingEvents()) {
             return;
         }
+        $cooldownPending = $this->pendingPhases['cooldown'] || $this->stateHasRunningCooldown($mode);
         $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $this->pendingPhases['heatup']);
-        $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $this->pendingPhases['cooldown']);
+        $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $cooldownPending);
     }
 
     public function GetActiveRule(): string
@@ -749,6 +753,17 @@ class bitCONTROL extends IPSModuleStrict
             3 => 'CombinedState',
             default => 'RuleState',
         };
+    }
+
+    private function stateHasRunningCooldown(int $mode): bool
+    {
+        $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+        foreach ($state as $key => $value) {
+            if ((int)$value !== 0 && str_starts_with($key, 'CooldownStart_')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
