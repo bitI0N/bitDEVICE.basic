@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 final class TimingSchedule
 {
-    /** @return ?int unix timestamp of the next phase end for this entry, null when no phase runs or timer disabled */
+    /**
+     * Unix timestamp of the running phase's end, null when no phase runs or the timer is off.
+     *
+     * A missed end is returned as it is — in the past. Deciding whether that expiry still has to
+     * fire is TriggerManager's job (it compares the event's LastRun); clamping it here would
+     * re-arm an already handled expiry on every single evaluation.
+     *
+     * @param int $now unused for the result, kept so callers keep passing an explicit clock
+     */
     public static function next(array $entry, string $stateKey, array $state, int $now): ?int
     {
         if (empty($entry['timerEnabled'])) {
@@ -23,14 +31,6 @@ final class TimingSchedule
             $end = $cooldownStart + $cooldown;
         } elseif ($heatupStart > 0 && $heatupDone !== 1 && $heatup > 0) {
             $end = $heatupStart + $heatup;
-        }
-
-        if ($end === null) {
-            return null;
-        }
-
-        if ($end <= $now) {
-            return $now + 2;
         }
 
         return $end;

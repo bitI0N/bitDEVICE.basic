@@ -30,6 +30,13 @@ class TriggerManager
     /**
      * Keeps one one-shot cyclic event per timed entry in sync with $schedule.
      *
+     * A timestamp in the future is programmed as it is. A timestamp in the past means the
+     * expiry was missed (module down, Symcon restart). It then fires exactly once: if the
+     * event's `LastRun` is older than the expiry, the event is re-armed to `now + 2`;
+     * if `LastRun` is at or after the expiry it has already fired for it and is only
+     * switched off. Without that check every evaluation would re-arm the same past expiry
+     * and the event would loop every two seconds.
+     *
      * @param array<string, ?int> $schedule eventName => unix timestamp of the next
      *                                       occurrence, or null to deactivate.
      */
@@ -97,6 +104,18 @@ class TriggerManager
                 IPS_SetEventActive($eventID, false);
             }
             return;
+        }
+
+        $now = time();
+        if ($timestamp <= $now) {
+            // Verpasster Ablauf: nur einmal nachholen, nie erneut scharf schalten.
+            if ((int)($event['LastRun'] ?? 0) >= $timestamp) {
+                if ($active) {
+                    IPS_SetEventActive($eventID, false);
+                }
+                return;
+            }
+            $timestamp = $now + 2;
         }
 
         $day    = (int)date('j', $timestamp);
