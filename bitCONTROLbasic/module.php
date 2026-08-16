@@ -208,7 +208,13 @@ class bitCONTROL extends IPSModuleStrict
             $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
             $heatup = false;
             foreach ($state as $key => $value) {
-                if ((int)$value !== 0 && str_starts_with($key, 'HeatupStart_')) {
+                if ((int)$value === 0 || !str_starts_with($key, 'HeatupStart_')) {
+                    continue;
+                }
+                // Ein abgelaufener Vorlauf (HeatupDone_ === 1) behält seinen Startzeitpunkt;
+                // nur ein noch laufender darf das Poll-Event wieder scharf schalten.
+                $stateKey = substr($key, strlen('HeatupStart_'));
+                if ((int)($state['HeatupDone_' . $stateKey] ?? 0) !== 1) {
                     $heatup = true;
                 }
             }
@@ -1353,6 +1359,11 @@ class bitCONTROL extends IPSModuleStrict
             default => 'RuleState',
         };
         $state = json_decode($this->ReadAttributeString($attribute), true) ?: [];
+        if ((int)($state[$key] ?? 0) === $value) {
+            // Der Timing-Pass schreibt pro Poll unverändertes markInactive/markActive;
+            // ohne diese Schranke würde jedes Mal das ganze Attribut neu serialisiert.
+            return;
+        }
         $state[$key] = $value;
         $this->WriteAttributeString($attribute, json_encode($state));
     }
