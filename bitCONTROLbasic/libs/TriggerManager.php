@@ -5,6 +5,9 @@ declare(strict_types=1);
 class TriggerManager
 {
     private const EVENT_PREFIX = 'BIT_';
+    public const TIMING_HEATUP = 'Heatup';
+    public const TIMING_COOLDOWN = 'Cooldown';
+    private const TIMING_PHASES = [self::TIMING_HEATUP, self::TIMING_COOLDOWN];
     private int $instanceID;
 
     public function __construct(int $instanceID)
@@ -12,7 +15,7 @@ class TriggerManager
         $this->instanceID = $instanceID;
     }
 
-    public function applyTriggers(array $triggers): void
+    public function applyTriggers(array $triggers, int $timingPollSeconds = 0): void
     {
         $this->removeOldManagedEvents();
 
@@ -24,6 +27,42 @@ class TriggerManager
                 $this->createCyclicTrigger($trigger);
             }
         }
+
+        if ($timingPollSeconds > 0) {
+            foreach (self::TIMING_PHASES as $phase) {
+                $this->createTimingEvent($phase, $timingPollSeconds);
+            }
+        }
+    }
+
+    public function getTimingEventID(string $phase): int
+    {
+        $name = self::EVENT_PREFIX . $phase;
+        foreach (IPS_GetChildrenIDs($this->instanceID) as $childID) {
+            $obj = IPS_GetObject($childID);
+            if (($obj['ObjectType'] ?? -1) === 4 && ($obj['ObjectName'] ?? '') === $name) {
+                return $childID;
+            }
+        }
+        return 0;
+    }
+
+    public function hasTimingEvents(): bool
+    {
+        return $this->getTimingEventID(self::TIMING_HEATUP) > 0;
+    }
+
+    public function setTimingEventActive(string $phase, bool $active): void
+    {
+        $eventID = $this->getTimingEventID($phase);
+        if ($eventID === 0) {
+            return;
+        }
+        $event = IPS_GetEvent($eventID);
+        if ((bool)($event['EventActive'] ?? false) === $active) {
+            return;
+        }
+        IPS_SetEventActive($eventID, $active);
     }
 
     public function buildAliasMap(array $triggers): array
@@ -80,6 +119,9 @@ class TriggerManager
         foreach (IPS_GetChildrenIDs($this->instanceID) as $childID) {
             $obj = IPS_GetObject($childID);
             if ($obj['ObjectType'] === 4 && str_starts_with($obj['ObjectName'], self::EVENT_PREFIX)) {
+                if ($this->isTimingEventName($obj['ObjectName'])) {
+                    continue;
+                }
                 $event = IPS_GetEvent($childID);
                 if (!$event['EventActive'] && $event['EventLimit'] > 0) {
                     $alias = substr($obj['ObjectName'], strlen(self::EVENT_PREFIX));
@@ -88,6 +130,16 @@ class TriggerManager
             }
         }
         return $deactivated;
+    }
+
+    private function isTimingEventName(string $name): bool
+    {
+        foreach (self::TIMING_PHASES as $phase) {
+            if ($name === self::EVENT_PREFIX . $phase) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function removeAllEvents(): void
@@ -265,6 +317,36 @@ class TriggerManager
 
         IPS_SetEventScript($eventID, 'BIT_Evaluate(' . $this->instanceID . ');');
         IPS_SetEventActive($eventID, !empty($trigger['active']));
+    }
+
+    private function createTimingEvent(string $phase, int $pollSeconds): void
+    {
+        $eventID = IPS_CreateEvent(1);
+        if ($eventID === false) {
+            IPS_LogMessage('bitCONTROL', sprintf('Instance %d: Failed to create timing event %s', $this->instanceID, $phase));
+            return;
+        }
+
+        [$timeType, $timeValue] = self::pollToCyclic($pollSeconds);
+
+        IPS_SetParent($eventID, $this->instanceID);
+        IPS_SetName($eventID, self::EVENT_PREFIX . $phase);
+        IPS_SetHidden($eventID, true);
+        IPS_SetEventCyclic($eventID, 2, 1, 0, 0, $timeType, $timeValue);
+        IPS_SetEventScript($eventID, 'BIT_EvaluateTiming(' . $this->instanceID . ');');
+        IPS_SetEventActive($eventID, false);
+    }
+
+    /** @return array{0: int, 1: int} Symcon TimeType (1=s, 2=min, 3=h) und Wert */
+    private static function pollToCyclic(int $seconds): array
+    {
+        if ($seconds % 3600 === 0) {
+            return [3, intdiv($seconds, 3600)];
+        }
+        if ($seconds % 60 === 0) {
+            return [2, intdiv($seconds, 60)];
+        }
+        return [1, $seconds];
     }
 
     private function dateToTimestamp(mixed $value): int
