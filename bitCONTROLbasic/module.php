@@ -513,6 +513,9 @@ class bitCONTROL extends IPSModuleStrict
 
                 if ($timingOnly && $heatupStatus !== 'elapsed') {
                     // Poll: nur der Vorlauf-Ablauf schreibt; die Formel bleibt sonst unangetastet.
+                    // Die Nachlauf-Buchhaltung läuft trotzdem mit, sonst bleibt ein alter
+                    // CooldownStart_ stehen und die nächste Abschaltung hält gar nicht.
+                    $timing->markActive($stateKey, $cooldownReset);
                     if ($isFirstMatch) {
                         break;
                     }

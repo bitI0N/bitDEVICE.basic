@@ -54,6 +54,12 @@ class RuleEvaluator
                     $this->executeActions($rule);
                     $this->timing->markActive($stateKey, $cooldownReset);
                     $this->timing->markLastRun($stateKey);
+                } else {
+                    // Timing-Pass ohne Ablauf: keine Aktionen, kein markLastRun — aber die
+                    // Buchhaltung muss mitlaufen. Sonst behält eine Regel, deren Bedingung
+                    // ohne Trigger wieder wahr wird (z. B. Zeitfenster), ihren alten
+                    // CooldownStart_ und die nächste Abschaltung gilt sofort als abgelaufen.
+                    $this->timing->markActive($stateKey, $cooldownReset);
                 }
 
                 if ($isFirstMatch) {
