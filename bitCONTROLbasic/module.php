@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/libs/ProLoader.php';
 require_once __DIR__ . '/libs/AliasValidator.php';
 require_once __DIR__ . '/libs/TimingEvaluator.php';
+require_once __DIR__ . '/libs/TimingSchedule.php';
 require_once __DIR__ . '/libs/RuleEvaluator.php';
 require_once __DIR__ . '/libs/TriggerManager.php';
 require_once __DIR__ . '/libs/FormBuilder.php';
