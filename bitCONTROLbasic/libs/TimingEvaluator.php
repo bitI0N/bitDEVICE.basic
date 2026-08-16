@@ -10,9 +10,6 @@ class TimingEvaluator
     /** @var callable(string, int): void */
     private $writeState;
 
-    private bool $heatupPending = false;
-    private bool $cooldownPending = false;
-
     public function __construct(callable $readState, callable $writeState)
     {
         $this->readState = $readState;
@@ -30,12 +27,10 @@ class TimingEvaluator
 
         if ($startTime === 0) {
             ($this->writeState)($key, time());
-            $this->heatupPending = true;
             return 'started';
         }
 
         if ((time() - $startTime) < $delaySeconds) {
-            $this->heatupPending = true;
             return 'waiting';
         }
 
@@ -71,12 +66,10 @@ class TimingEvaluator
 
         if ($startTime === 0) {
             ($this->writeState)($key, time());
-            $this->cooldownPending = true;
             return 'started';
         }
 
         if ((time() - $startTime) < $cooldownSeconds) {
-            $this->cooldownPending = true;
             return 'active';
         }
 
@@ -91,12 +84,6 @@ class TimingEvaluator
     public static function isCooldownOver(string $status): bool
     {
         return $status === 'expired' || $status === 'elapsed';
-    }
-
-    /** @return array{heatup: bool, cooldown: bool} */
-    public function getPendingPhases(): array
-    {
-        return ['heatup' => $this->heatupPending, 'cooldown' => $this->cooldownPending];
     }
 
     public static function remainingSeconds(int $startTime, int $durationSeconds, ?int $now = null): int

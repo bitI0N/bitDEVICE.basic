@@ -130,7 +130,7 @@ class FormBuilder
         return $day . ', ' . $time;
     }
 
-    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1, int $timingPollSeconds = 1, int $timingPollUnit = 60, array $timingState = [], ?int $now = null): array
+    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1, array $timingState = [], ?int $now = null): array
     {
         $elements = [];
 
@@ -140,7 +140,7 @@ class FormBuilder
             'caption' => 'Active',
         ];
 
-        $elements[] = self::buildTriggerPanel($allTriggers, $deactivatedByLimit, $timingPollSeconds, $timingPollUnit);
+        $elements[] = self::buildTriggerPanel($allTriggers, $deactivatedByLimit);
 
         $modeOptions = [['caption' => 'Rule', 'value' => 0]];
         if (ProLoader::has('formula')) {
@@ -218,7 +218,7 @@ class FormBuilder
         return $form;
     }
 
-    private static function buildTriggerPanel(array $triggers, array $deactivatedByLimit = [], int $timingPollSeconds = 1, int $timingPollUnit = 60): array
+    private static function buildTriggerPanel(array $triggers, array $deactivatedByLimit = []): array
     {
         $values      = [];
         $seenAliases = [];
@@ -444,19 +444,6 @@ class FormBuilder
             ],
         ];
 
-        if (ProLoader::has('timing')) {
-            $panelItems[] = [
-                'type'    => 'RowLayout',
-                'items'   => [
-                    ['type' => 'NumberSpinner', 'name' => 'TimingPollSeconds', 'caption' => self::t('Timer check interval'),
-                        'minimum' => 0, 'value' => $timingPollSeconds, 'suffix' => ' ' . self::t('(0 = off)')],
-                    ['type' => 'Select', 'name' => 'TimingPollUnit', 'caption' => ' ', 'value' => $timingPollUnit, 'options' => [
-                        ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
-                    ]],
-                ],
-            ];
-        }
-
         return [
             'type'     => 'ExpansionPanel',
             'caption'  => $caption,
@@ -474,9 +461,15 @@ class FormBuilder
         return $seconds . ' ' . ($labels[$unit] ?? 's');
     }
 
-    public static function formatTimedDuration(int $value, int $unit, int $startTime, ?int $now = null): string
+    /**
+     * @param bool $timer entry has its own one-shot timing event → mark the cell with ⏱
+     */
+    public static function formatTimedDuration(int $value, int $unit, int $startTime, ?int $now = null, bool $timer = false): string
     {
         $base = self::formatDuration($value, $unit);
+        if ($timer && $value > 0) {
+            $base .= ' ⏱';
+        }
         if ($value === 0 || $startTime <= 0) {
             return $base;
         }
@@ -600,10 +593,11 @@ class FormBuilder
                 $status = self::t('Duplicate name');
             }
             $stateKey = $stateKeys[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] ?? '';
+            $timer    = !empty($rule['timerEnabled']);
             $values[] = array_merge($rule, [
                 'rowColor'        => $color,
-                'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now),
-                'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now),
+                'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                 'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
                 'ruleStatus'      => $status,
             ]);
@@ -634,6 +628,7 @@ class FormBuilder
                     ['caption' => '', 'name' => 'cooldownSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'cooldownUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => '', 'name' => 'cooldownResetOnReactivation', 'width' => '0px', 'add' => true, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => '', 'name' => 'timerEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'intervalSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'intervalUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
@@ -708,11 +703,12 @@ class FormBuilder
             }
 
             $stateKey = self::formulaStateKey($output);
+            $timer    = !empty($output['timerEnabled']);
             $values[] = array_merge($output, [
                 'formulaStatus'   => $status,
                 'rowColor'        => $color,
-                'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now),
-                'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now),
+                'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                 'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
             ]);
         }
@@ -739,6 +735,7 @@ class FormBuilder
                     ['caption' => '', 'name' => 'cooldownSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'cooldownUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => '', 'name' => 'cooldownResetOnReactivation', 'width' => '0px', 'add' => true, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => '', 'name' => 'timerEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'intervalSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'intervalUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
@@ -817,6 +814,7 @@ class FormBuilder
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
                 $stateKey = RuleEvaluator::ruleKey($rule, 0);
+                $timer    = !empty($rule['timerEnabled']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Rule'),
@@ -824,8 +822,8 @@ class FormBuilder
                     'active'          => !empty($rule['active']),
                     'actionDisplay'   => self::formatRuleActionDisplay($rule),
                     'conditionDisplay' => $rule['conditions'] ?? '[]',
-                    'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now),
-                    'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now),
+                    'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                    'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
                     'statusDisplay'   => $ruleStatus,
                     'rowColor'        => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
@@ -835,6 +833,7 @@ class FormBuilder
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
                 $stateKey = self::formulaStateKey($output);
+                $timer    = !empty($output['timerEnabled']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Formula'),
@@ -842,8 +841,8 @@ class FormBuilder
                     'active'          => !empty($output['active']),
                     'actionDisplay'   => self::formatFormulaActionDisplay($output),
                     'conditionDisplay' => $output['conditions'] ?? '[]',
-                    'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now),
-                    'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now),
+                    'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                    'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                     'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
                     'statusDisplay'   => $status,
                     'rowColor'        => $color,
@@ -912,6 +911,7 @@ class FormBuilder
                         ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
                     ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption')],
+                    ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('Timer')],
                 ]],
                 ['type' => 'RowLayout', 'visible' => ProLoader::has('timing'), 'items' => [
                     ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0],
@@ -960,6 +960,7 @@ class FormBuilder
                         ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
                     ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption')],
+                    ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('Timer')],
                 ]],
                 ['type' => 'RowLayout', 'items' => [
                     ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0],

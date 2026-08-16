@@ -39,8 +39,6 @@ class bitCONTROL extends IPSModuleStrict
         $this->RegisterPropertyBoolean('CombinedSkipHeatup', false);
         $this->RegisterPropertyBoolean('CombinedSkipCooldown', false);
         $this->RegisterPropertyBoolean('CombinedSkipInterval', false);
-        $this->RegisterPropertyInteger('TimingPollSeconds', 1);
-        $this->RegisterPropertyInteger('TimingPollUnit', 60);
 
         // Attributes
         $this->RegisterAttributeString('RuleState', '{}');
@@ -187,7 +185,7 @@ class bitCONTROL extends IPSModuleStrict
             }
         }
 
-        $triggerManager->applyTriggers($triggers, $this->timingPollSeconds());
+        $triggerManager->applyTriggers($triggers);
 
         foreach ($triggers as $trigger) {
             $variableID = $trigger['variableID'] ?? 0;
@@ -204,24 +202,7 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         $this->pruneOrphanedState($mode);
-
-        if ($mode !== 2 && $triggerManager->hasTimingEvents()) {
-            $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
-            $heatup = false;
-            foreach ($state as $key => $value) {
-                if ((int)$value === 0 || !str_starts_with($key, 'HeatupStart_')) {
-                    continue;
-                }
-                // Ein abgelaufener Vorlauf (HeatupDone_ === 1) behält seinen Startzeitpunkt;
-                // nur ein noch laufender darf das Poll-Event wieder scharf schalten.
-                $stateKey = substr($key, strlen('HeatupStart_'));
-                if ((int)($state['HeatupDone_' . $stateKey] ?? 0) !== 1) {
-                    $heatup = true;
-                }
-            }
-            $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $heatup);
-            $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $this->stateHasRunningCooldown($mode));
-        }
+        $this->syncTimers($mode);
 
         if ($mode === 3) {
             $this->syncCombinedOrder();
@@ -244,17 +225,14 @@ class bitCONTROL extends IPSModuleStrict
         }
     }
 
-    /** @var array{heatup: bool, cooldown: bool} */
-    private array $pendingPhases = ['heatup' => false, 'cooldown' => false];
-
     public function Evaluate(): bool
     {
         return $this->runEvaluation(false);
     }
 
     /**
-     * Poll entry point of BIT_Heatup / BIT_Cooldown: same flow as Evaluate(),
-     * but only transitions caused by elapsed time execute actions.
+     * Entry point of the per-entry one-shot events BIT_Timing_<key>: same flow as
+     * Evaluate(), but only transitions caused by elapsed time execute actions.
      */
     public function EvaluateTiming(): bool
     {
@@ -262,10 +240,9 @@ class bitCONTROL extends IPSModuleStrict
     }
 
     /**
-     * Beide Poll-Events (BIT_Heatup, BIT_Cooldown) teilen sich denselben zyklischen
-     * Takt und können auf derselben Sekunde feuern; ein Trigger kann dazwischen
-     * liegen. Die Elapsed-Latches in TimingEvaluator sind Read-Modify-Write auf
-     * demselben State-Attribut, deshalb wird eine Auswertung pro Instanz serialisiert.
+     * Ein Timer-Event und ein Trigger können auf derselben Sekunde feuern. Die
+     * Elapsed-Latches in TimingEvaluator sind Read-Modify-Write auf demselben
+     * State-Attribut, deshalb wird eine Auswertung pro Instanz serialisiert.
      */
     private function runEvaluation(bool $timingOnly): bool
     {
@@ -288,8 +265,6 @@ class bitCONTROL extends IPSModuleStrict
 
     private function runEvaluationLocked(bool $timingOnly): bool
     {
-        $this->pendingPhases = ['heatup' => false, 'cooldown' => false];
-
         $triggers = $this->getAllTriggers();
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
@@ -304,37 +279,86 @@ class bitCONTROL extends IPSModuleStrict
             default => null,
         };
 
-        $this->syncTimingEvents($triggerManager, $mode);
-
         $this->SetValue('LastEvaluation', time());
         if (!$timingOnly) {
             $this->SetValue('ActiveRule', $result ?? '');
         }
         $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', $result ?? 'no result', 0);
 
+        // Der Zeitplan wird aus dem State abgeleitet, nicht aus dem Auswertungslauf:
+        // erst nach der Auswertung steht fest, welche Phase gerade läuft.
+        $this->syncTimers($mode);
+
         return true;
     }
 
-    private function mergePending(array $phases): void
-    {
-        $this->pendingPhases['heatup']   = $this->pendingPhases['heatup'] || !empty($phases['heatup']);
-        $this->pendingPhases['cooldown'] = $this->pendingPhases['cooldown'] || !empty($phases['cooldown']);
-    }
-
-    private function syncTimingEvents(TriggerManager $triggerManager, int $mode): void
+    /**
+     * Next expiry per timed entry, derived from the persisted state.
+     *
+     * @return array<string, ?int> eventName => unix timestamp, or null to deactivate
+     */
+    private function timerSchedule(int $mode): array
     {
         if (!ProLoader::has('timing')) {
-            return;
+            return [];
         }
-        if ($mode === 2) {
-            return;
+
+        $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+        $now = time();
+        $schedule = [];
+
+        $add = function (array $entry, string $name, string $stateKey) use (&$schedule, $state, $now): void {
+            // Namenskollision: der erste Eintrag gewinnt (Duplikate sind Status 205).
+            if (array_key_exists($name, $schedule)) {
+                return;
+            }
+            $schedule[$name] = TimingSchedule::next($entry, $stateKey, $state, $now);
+        };
+
+        $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+        $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+
+        if ($mode === 0) {
+            foreach (RuleEvaluator::stateKeys($rules) as $entry) {
+                $rule = $entry['rule'];
+                if (empty($rule['timerEnabled'])) {
+                    continue;
+                }
+                $add($rule, TimingSchedule::eventName(RuleEvaluator::ruleKey($rule)), $entry['key']);
+            }
         }
-        if (!$triggerManager->hasTimingEvents()) {
-            return;
+
+        if ($mode === 3) {
+            // Combined wertet jede Regel einzeln aus → ihr State-Key ist immer Rang 0.
+            foreach ($rules as $rule) {
+                if (empty($rule['active']) || empty($rule['timerEnabled'])) {
+                    continue;
+                }
+                $add($rule, TimingSchedule::eventName(RuleEvaluator::ruleKey($rule)), RuleEvaluator::ruleKey($rule, 0));
+            }
         }
-        $cooldownPending = $this->pendingPhases['cooldown'] || $this->stateHasRunningCooldown($mode);
-        $triggerManager->setTimingEventActive(TriggerManager::TIMING_HEATUP, $this->pendingPhases['heatup']);
-        $triggerManager->setTimingEventActive(TriggerManager::TIMING_COOLDOWN, $cooldownPending);
+
+        if ($mode === 1 || $mode === 3) {
+            foreach ($formulaOutputs as $output) {
+                // Dieselbe Vorauswahl wie runFormulaEvaluator(): was nie ausgewertet
+                // wird, kann seinen eigenen State auch nie wieder abräumen.
+                if (empty($output['active']) || ($output['formula'] ?? '') === '' || ($output['variableID'] ?? 0) === 0) {
+                    continue;
+                }
+                if (empty($output['timerEnabled'])) {
+                    continue;
+                }
+                $stateKey = $this->formulaStateKey($output);
+                $add($output, TimingSchedule::eventName($stateKey), $stateKey);
+            }
+        }
+
+        return $schedule;
+    }
+
+    private function syncTimers(int $mode): void
+    {
+        (new TriggerManager($this->InstanceID))->syncTimingEvents($this->timerSchedule($mode));
     }
 
     public function GetActiveRule(): string
@@ -437,8 +461,6 @@ class bitCONTROL extends IPSModuleStrict
             $deactivatedByLimit,
             $combinedOrder,
             $combinedEvaluation,
-            $this->ReadPropertyInteger('TimingPollSeconds'),
-            $this->ReadPropertyInteger('TimingPollUnit'),
             $timingState
         );
 
@@ -465,9 +487,7 @@ class bitCONTROL extends IPSModuleStrict
         };
 
         $evaluator = new RuleEvaluator($this->InstanceID, $readState, $writeState);
-        $result = $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'), $timingOnly);
-        $this->mergePending($evaluator->getPendingPhases());
-        return $result;
+        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'), $timingOnly);
     }
 
     private function evaluateFormulas(array $aliasMap, bool $timingOnly = false): ?string
@@ -609,8 +629,6 @@ class bitCONTROL extends IPSModuleStrict
                 break;
             }
         }
-
-        $this->mergePending($timing->getPendingPhases());
 
         return !empty($results) ? implode(', ', $results) : null;
     }
@@ -785,14 +803,6 @@ class bitCONTROL extends IPSModuleStrict
         ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
     }
 
-    private function timingPollSeconds(): int
-    {
-        if (!ProLoader::has('timing')) {
-            return 0;
-        }
-        return max(0, $this->ReadPropertyInteger('TimingPollSeconds')) * max(1, $this->ReadPropertyInteger('TimingPollUnit'));
-    }
-
     private function stateAttributeForMode(int $mode): string
     {
         return match ($mode) {
@@ -802,15 +812,12 @@ class bitCONTROL extends IPSModuleStrict
         };
     }
 
-    private function stateHasRunningCooldown(int $mode): bool
+    /** The one state key of a formula output — used by evaluation, prune and timers alike. */
+    private function formulaStateKey(array $output): string
     {
-        $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
-        foreach ($state as $key => $value) {
-            if ((int)$value !== 0 && str_starts_with($key, 'CooldownStart_')) {
-                return true;
-            }
-        }
-        return false;
+        $alias = $output['alias'] ?? '';
+        $variableID = $output['variableID'] ?? 0;
+        return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
@@ -1301,11 +1308,7 @@ class bitCONTROL extends IPSModuleStrict
 
         if ($mode === 1) {
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
-            $validKeys = array_map(function ($o) {
-                $alias = $o['alias'] ?? '';
-                $variableID = $o['variableID'] ?? 0;
-                return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
-            }, $formulaOutputs);
+            $validKeys = array_map(fn ($o) => $this->formulaStateKey($o), $formulaOutputs);
             $state = json_decode($this->ReadAttributeString('FormulaState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('FormulaState', json_encode($pruned));
@@ -1317,11 +1320,7 @@ class bitCONTROL extends IPSModuleStrict
             // Combined wertet jede Regel einzeln aus → ihr Key ist immer Rang 0.
             $validKeys = array_merge(
                 array_map(static fn ($r) => RuleEvaluator::ruleKey($r, 0), $rules),
-                array_map(function ($o) {
-                    $alias = $o['alias'] ?? '';
-                    $variableID = $o['variableID'] ?? 0;
-                    return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
-                }, $formulaOutputs)
+                array_map(fn ($o) => $this->formulaStateKey($o), $formulaOutputs)
             );
             $state = json_decode($this->ReadAttributeString('CombinedState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);

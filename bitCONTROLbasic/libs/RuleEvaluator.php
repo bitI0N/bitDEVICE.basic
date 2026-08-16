@@ -99,12 +99,6 @@ class RuleEvaluator
         return $activeRuleName;
     }
 
-    /** @return array{heatup: bool, cooldown: bool} */
-    public function getPendingPhases(): array
-    {
-        return $this->timing->getPendingPhases();
-    }
-
     /**
      * Die eine Rangfolge der Regel-State-Keys: aktive Regeln, nach `position` sortiert,
      * 0-basierter Rang. Jeder Ort, der State-Keys braucht (evaluate(), FormBuilder-Anzeige,
