@@ -593,7 +593,7 @@ class FormBuilder
                 $status = self::t('Duplicate name');
             }
             $stateKey = $stateKeys[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] ?? '';
-            $timer    = !empty($rule['timerEnabled']);
+            $timer    = !empty($rule['timerEnabled']) && !empty($rule['active']);
             $values[] = array_merge($rule, [
                 'rowColor'        => $color,
                 'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
@@ -703,7 +703,7 @@ class FormBuilder
             }
 
             $stateKey = self::formulaStateKey($output);
-            $timer    = !empty($output['timerEnabled']);
+            $timer    = !empty($output['timerEnabled']) && !empty($output['active']);
             $values[] = array_merge($output, [
                 'formulaStatus'   => $status,
                 'rowColor'        => $color,
@@ -814,7 +814,7 @@ class FormBuilder
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
                 $stateKey = RuleEvaluator::ruleKey($rule, 0);
-                $timer    = !empty($rule['timerEnabled']);
+                $timer    = !empty($rule['timerEnabled']) && !empty($rule['active']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Rule'),
@@ -833,7 +833,7 @@ class FormBuilder
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
                 $stateKey = self::formulaStateKey($output);
-                $timer    = !empty($output['timerEnabled']);
+                $timer    = !empty($output['timerEnabled']) && !empty($output['active']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Formula'),

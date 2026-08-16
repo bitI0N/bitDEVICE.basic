@@ -37,6 +37,10 @@ class TriggerManager
      * switched off. Without that check every evaluation would re-arm the same past expiry
      * and the event would loop every two seconds.
      *
+     * A phase end that falls into the repeated hour of a DST fall-back is ambiguous as a local
+     * wall clock time; it is shifted by one hour so the programmed components address the
+     * intended instant instead of the earlier one (see applyTimingSchedule()).
+     *
      * @param array<string, ?int> $schedule eventName => unix timestamp of the next
      *                                       occurrence, or null to deactivate.
      */
@@ -124,6 +128,22 @@ class TriggerManager
         $hour   = (int)date('G', $timestamp);
         $minute = (int)date('i', $timestamp);
         $second = (int)date('s', $timestamp);
+
+        // DST fall-back: in the repeated hour the local time is ambiguous and mktime() resolves
+        // it to the earlier instant. Symcon programs the event from exactly these components, so
+        // it would fire an hour too early. Shifting the expiry once by that difference makes the
+        // wall clock unambiguous again: the phase end fires up to an hour late, but exactly once.
+        // The shifted timestamp round-trips, so this can never loop.
+        $roundTrip = mktime($hour, $minute, $second, $month, $day, $year);
+        if ($roundTrip !== $timestamp) {
+            $timestamp += ($timestamp - $roundTrip);
+            $day    = (int)date('j', $timestamp);
+            $month  = (int)date('n', $timestamp);
+            $year   = (int)date('Y', $timestamp);
+            $hour   = (int)date('G', $timestamp);
+            $minute = (int)date('i', $timestamp);
+            $second = (int)date('s', $timestamp);
+        }
 
         $dateFrom = $event['CyclicDateFrom'] ?? [];
         $timeFrom = $event['CyclicTimeFrom'] ?? [];

@@ -308,7 +308,9 @@ class bitCONTROL extends IPSModuleStrict
         $schedule = [];
 
         $add = function (array $entry, string $name, string $stateKey) use (&$schedule, $state, $now): void {
-            // Namenskollision: der erste Eintrag gewinnt (Duplikate sind Status 205).
+            // Namenskollision: der erste Eintrag gewinnt. Im Regel-Modus verhindert der
+            // Duplikat-Guard (Status 205) sie ohnehin; im Combined-Modus teilen sich doppelte
+            // oder leere Namen denselben State-Key und damit ein Event (Verhalten wie bisher).
             if (array_key_exists($name, $schedule)) {
                 return;
             }
@@ -533,7 +535,7 @@ class bitCONTROL extends IPSModuleStrict
                 continue;
             }
 
-            $stateKey = preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
+            $stateKey = $this->formulaStateKey($output);
 
             $conditions    = $output['conditions'] ?? '[]';
             $conditionsMet = ($conditions === '' || $conditions === '[]') ? true : (bool)IPS_IsConditionPassing($conditions);
