@@ -254,12 +254,33 @@ class bitCONTROL extends IPSModuleStrict
         return $this->runEvaluation(true);
     }
 
+    /**
+     * Beide Poll-Events (BIT_Heatup, BIT_Cooldown) teilen sich denselben zyklischen
+     * Takt und können auf derselben Sekunde feuern; ein Trigger kann dazwischen
+     * liegen. Die Elapsed-Latches in TimingEvaluator sind Read-Modify-Write auf
+     * demselben State-Attribut, deshalb wird eine Auswertung pro Instanz serialisiert.
+     */
     private function runEvaluation(bool $timingOnly): bool
     {
         if (!$this->ReadPropertyBoolean('Active')) {
             return false;
         }
 
+        $semaphore = 'bitCONTROL_' . $this->InstanceID;
+        if (!IPS_SemaphoreEnter($semaphore, 5000)) {
+            $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', 'skipped: another evaluation is running', 0);
+            return false;
+        }
+
+        try {
+            return $this->runEvaluationLocked($timingOnly);
+        } finally {
+            IPS_SemaphoreLeave($semaphore);
+        }
+    }
+
+    private function runEvaluationLocked(bool $timingOnly): bool
+    {
         $this->pendingPhases = ['heatup' => false, 'cooldown' => false];
 
         $triggers = $this->getAllTriggers();
