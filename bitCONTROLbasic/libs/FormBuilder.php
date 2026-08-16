@@ -447,7 +447,6 @@ class FormBuilder
         if (ProLoader::has('timing')) {
             $panelItems[] = [
                 'type'    => 'RowLayout',
-                'visible' => ProLoader::has('timing'),
                 'items'   => [
                     ['type' => 'NumberSpinner', 'name' => 'TimingPollSeconds', 'caption' => self::t('Timer check interval'),
                         'minimum' => 0, 'value' => $timingPollSeconds, 'suffix' => ' ' . self::t('(0 = off)')],
