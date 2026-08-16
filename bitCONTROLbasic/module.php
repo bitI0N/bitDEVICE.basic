@@ -396,7 +396,9 @@ class bitCONTROL extends IPSModuleStrict
         $combinedOrder       = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
         $combinedEvaluation  = $this->ReadPropertyInteger('CombinedEvaluation');
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
-        $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit, $combinedOrder, $combinedEvaluation);
+        $timingState = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+        $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit, $combinedOrder, $combinedEvaluation,
+            $this->ReadPropertyInteger('TimingPollSeconds'), $this->ReadPropertyInteger('TimingPollUnit'), $timingState);
 
         return json_encode($form);
     }
