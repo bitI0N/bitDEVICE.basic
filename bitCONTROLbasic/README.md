@@ -30,6 +30,7 @@ Vollständiger PHP-Code für komplexe Szenarien. Trigger-Aliase stehen als Varia
 - Vorlauf (Heatup): Aktion erst nach stabil erfüllter Bedingung
 - Nachlauf (Cooldown): Aktion bleibt nach Ende der Bedingung für die eingestellte Zeit aktiv
 - Sperrzeit (Interval): Mindestabstand zwischen zwei Ausführungen derselben Regel/Formel
+- Timer-Prüfintervall: Vorlauf/Nachlauf laufen ohne neuen Trigger ab (Plus/Pro)
 - Drag & Drop Priorisierung
 - Live-Status (aktive Regel, letzte Auswertung)
 - Validierung von Formeln und Scripts vor dem Speichern
