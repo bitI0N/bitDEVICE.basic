@@ -17,13 +17,11 @@ class RuleEvaluator
     {
         $isFirstMatch = $evaluationMode === 0;
 
-        $activeRules = array_filter($rules, static fn (array $rule) => !empty($rule['active']));
-        usort($activeRules, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
-
         $activeRuleName = null;
 
-        foreach ($activeRules as $index => $rule) {
-            $stateKey = self::ruleKey($rule, $index);
+        foreach (self::stateKeys($rules) as $entry) {
+            $stateKey = $entry['key'];
+            $rule     = $entry['rule'];
             $conditionsMet = $this->checkConditions($rule);
 
             $heatupReset   = (bool)($rule['heatupResetOnInterruption'] ?? true);
@@ -99,6 +97,27 @@ class RuleEvaluator
     public function getPendingPhases(): array
     {
         return $this->timing->getPendingPhases();
+    }
+
+    /**
+     * Die eine Rangfolge der Regel-State-Keys: aktive Regeln, nach `position` sortiert,
+     * 0-basierter Rang. Jeder Ort, der State-Keys braucht (evaluate(), FormBuilder-Anzeige,
+     * Prune in module.php), muss diese Liste benutzen — sonst prunt ApplyChanges Keys,
+     * die die Auswertung gerade benutzt.
+     *
+     * @return list<array{key: string, rule: array}>
+     */
+    public static function stateKeys(array $rules): array
+    {
+        $activeRules = array_filter($rules, static fn (array $rule) => !empty($rule['active']));
+        usort($activeRules, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
+
+        $keys = [];
+        foreach ($activeRules as $rank => $rule) {
+            $keys[] = ['key' => self::ruleKey($rule, $rank), 'rule' => $rule];
+        }
+
+        return $keys;
     }
 
     public static function ruleKey(array $rule, int $index = -1): string

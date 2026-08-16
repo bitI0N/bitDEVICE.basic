@@ -1248,7 +1248,7 @@ class bitCONTROL extends IPSModuleStrict
     {
         if ($mode === 0) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
-            $validKeys = array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules));
+            $validKeys = array_column(RuleEvaluator::stateKeys($rules), 'key');
             $state = json_decode($this->ReadAttributeString('RuleState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('RuleState', json_encode($pruned));
@@ -1269,8 +1269,9 @@ class bitCONTROL extends IPSModuleStrict
         if ($mode === 3) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            // Combined wertet jede Regel einzeln aus → ihr Key ist immer Rang 0.
             $validKeys = array_merge(
-                array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules)),
+                array_map(static fn ($r) => RuleEvaluator::ruleKey($r, 0), $rules),
                 array_map(function ($o) {
                     $alias = $o['alias'] ?? '';
                     $variableID = $o['variableID'] ?? 0;

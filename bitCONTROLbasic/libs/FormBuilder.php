@@ -496,14 +496,13 @@ class FormBuilder
         return $h > 0 ? sprintf('%d:%02d:%02d', $h, $m, $s) : sprintf('%d:%02d', $m, $s);
     }
 
-    /** Same ranking as RuleEvaluator::evaluate(): active rules, sorted by position, 0-based. */
+    /** Ranking comes from RuleEvaluator::stateKeys() — the single source for rule state keys. */
     private static function ruleStateKeys(array $rules): array
     {
-        $active = array_filter($rules, static fn (array $r) => !empty($r['active']));
-        usort($active, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
         $map = [];
-        foreach ($active as $rank => $rule) {
-            $map[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] = RuleEvaluator::ruleKey($rule, $rank);
+        foreach (RuleEvaluator::stateKeys($rules) as $entry) {
+            $rule = $entry['rule'];
+            $map[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] = $entry['key'];
         }
         return $map;
     }
