@@ -5,9 +5,7 @@ declare(strict_types=1);
 class TriggerManager
 {
     private const EVENT_PREFIX = 'BIT_';
-    public const TIMING_HEATUP = 'Heatup';
-    public const TIMING_COOLDOWN = 'Cooldown';
-    private const TIMING_PHASES = [self::TIMING_HEATUP, self::TIMING_COOLDOWN];
+    private const TIMING_EVENT_PREFIX = self::EVENT_PREFIX . 'Timing_';
     private int $instanceID;
 
     public function __construct(int $instanceID)
@@ -15,7 +13,7 @@ class TriggerManager
         $this->instanceID = $instanceID;
     }
 
-    public function applyTriggers(array $triggers, int $timingPollSeconds = 0): void
+    public function applyTriggers(array $triggers): void
     {
         $this->removeOldManagedEvents();
 
@@ -27,42 +25,106 @@ class TriggerManager
                 $this->createCyclicTrigger($trigger);
             }
         }
+    }
 
-        if ($timingPollSeconds > 0) {
-            foreach (self::TIMING_PHASES as $phase) {
-                $this->createTimingEvent($phase, $timingPollSeconds);
+    /**
+     * Keeps one one-shot cyclic event per timed entry in sync with $schedule.
+     *
+     * @param array<string, ?int> $schedule eventName => unix timestamp of the next
+     *                                       occurrence, or null to deactivate.
+     */
+    public function syncTimingEvents(array $schedule): void
+    {
+        $existing = $this->getTimingEventsByName();
+
+        foreach ($schedule as $name => $timestamp) {
+            $eventID = $existing[$name] ?? 0;
+            unset($existing[$name]);
+
+            if ($eventID === 0) {
+                $eventID = $this->createTimingEvent($name);
+                if ($eventID === 0) {
+                    continue;
+                }
             }
+
+            $this->applyTimingSchedule($eventID, $timestamp);
+        }
+
+        foreach ($existing as $eventID) {
+            IPS_DeleteEvent($eventID);
         }
     }
 
-    public function getTimingEventID(string $phase): int
+    /** @return array<string, int> eventName => eventID for existing BIT_Timing_* events */
+    private function getTimingEventsByName(): array
     {
-        $name = self::EVENT_PREFIX . $phase;
+        $events = [];
         foreach (IPS_GetChildrenIDs($this->instanceID) as $childID) {
             $obj = IPS_GetObject($childID);
-            if (($obj['ObjectType'] ?? -1) === 4 && ($obj['ObjectName'] ?? '') === $name) {
-                return $childID;
+            $name = $obj['ObjectName'] ?? '';
+            if (($obj['ObjectType'] ?? -1) === 4 && str_starts_with($name, self::TIMING_EVENT_PREFIX)) {
+                $events[$name] = $childID;
             }
         }
-        return 0;
+        return $events;
     }
 
-    public function hasTimingEvents(): bool
+    private function createTimingEvent(string $name): int
     {
-        return $this->getTimingEventID(self::TIMING_HEATUP) > 0;
-    }
-
-    public function setTimingEventActive(string $phase, bool $active): void
-    {
-        $eventID = $this->getTimingEventID($phase);
-        if ($eventID === 0) {
-            return;
+        $eventID = IPS_CreateEvent(1);
+        if ($eventID === false) {
+            IPS_LogMessage('bitCONTROL', sprintf('Instance %d: Failed to create timing event %s', $this->instanceID, $name));
+            return 0;
         }
+
+        IPS_SetParent($eventID, $this->instanceID);
+        IPS_SetName($eventID, $name);
+        IPS_SetHidden($eventID, true);
+        IPS_SetEventScript($eventID, 'BIT_EvaluateTiming(' . $this->instanceID . ');');
+        IPS_SetEventActive($eventID, false);
+
+        return $eventID;
+    }
+
+    private function applyTimingSchedule(int $eventID, ?int $timestamp): void
+    {
         $event = IPS_GetEvent($eventID);
-        if ((bool)($event['EventActive'] ?? false) === $active) {
+        $active = (bool)($event['EventActive'] ?? false);
+
+        if ($timestamp === null) {
+            if ($active) {
+                IPS_SetEventActive($eventID, false);
+            }
             return;
         }
-        IPS_SetEventActive($eventID, $active);
+
+        $day    = (int)date('j', $timestamp);
+        $month  = (int)date('n', $timestamp);
+        $year   = (int)date('Y', $timestamp);
+        $hour   = (int)date('G', $timestamp);
+        $minute = (int)date('i', $timestamp);
+        $second = (int)date('s', $timestamp);
+
+        $dateFrom = $event['CyclicDateFrom'] ?? [];
+        $timeFrom = $event['CyclicTimeFrom'] ?? [];
+
+        $unchanged = $active
+            && (int)($dateFrom['Day'] ?? -1) === $day
+            && (int)($dateFrom['Month'] ?? -1) === $month
+            && (int)($dateFrom['Year'] ?? -1) === $year
+            && (int)($timeFrom['Hour'] ?? -1) === $hour
+            && (int)($timeFrom['Minute'] ?? -1) === $minute
+            && (int)($timeFrom['Second'] ?? -1) === $second;
+
+        if ($unchanged) {
+            return;
+        }
+
+        IPS_SetEventCyclic($eventID, 1, 0, 0, 0, 0, 0);
+        IPS_SetEventCyclicDateFrom($eventID, $day, $month, $year);
+        IPS_SetEventCyclicTimeFrom($eventID, $hour, $minute, $second);
+        IPS_SetEventActive($eventID, true);
     }
 
     public function buildAliasMap(array $triggers): array
@@ -134,12 +196,7 @@ class TriggerManager
 
     private function isTimingEventName(string $name): bool
     {
-        foreach (self::TIMING_PHASES as $phase) {
-            if ($name === self::EVENT_PREFIX . $phase) {
-                return true;
-            }
-        }
-        return false;
+        return str_starts_with($name, self::TIMING_EVENT_PREFIX);
     }
 
     public function removeAllEvents(): void
@@ -317,36 +374,6 @@ class TriggerManager
 
         IPS_SetEventScript($eventID, 'BIT_Evaluate(' . $this->instanceID . ');');
         IPS_SetEventActive($eventID, !empty($trigger['active']));
-    }
-
-    private function createTimingEvent(string $phase, int $pollSeconds): void
-    {
-        $eventID = IPS_CreateEvent(1);
-        if ($eventID === false) {
-            IPS_LogMessage('bitCONTROL', sprintf('Instance %d: Failed to create timing event %s', $this->instanceID, $phase));
-            return;
-        }
-
-        [$timeType, $timeValue] = self::pollToCyclic($pollSeconds);
-
-        IPS_SetParent($eventID, $this->instanceID);
-        IPS_SetName($eventID, self::EVENT_PREFIX . $phase);
-        IPS_SetHidden($eventID, true);
-        IPS_SetEventCyclic($eventID, 2, 1, 0, 0, $timeType, $timeValue);
-        IPS_SetEventScript($eventID, 'BIT_EvaluateTiming(' . $this->instanceID . ');');
-        IPS_SetEventActive($eventID, false);
-    }
-
-    /** @return array{0: int, 1: int} Symcon TimeType (1=s, 2=min, 3=h) und Wert */
-    private static function pollToCyclic(int $seconds): array
-    {
-        if ($seconds % 3600 === 0) {
-            return [3, intdiv($seconds, 3600)];
-        }
-        if ($seconds % 60 === 0) {
-            return [2, intdiv($seconds, 60)];
-        }
-        return [1, $seconds];
     }
 
     private function dateToTimestamp(mixed $value): int
