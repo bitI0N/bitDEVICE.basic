@@ -13,7 +13,7 @@ class RuleEvaluator
         $this->timing = new TimingEvaluator($readState, $writeState);
     }
 
-    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false, bool $timingEnabled = true, bool $fallbackEnabled = true): ?string
+    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false, bool $timingEnabled = true, bool $fallbackEnabled = true, bool $timingOnly = false): ?string
     {
         $isFirstMatch = $evaluationMode === 0;
 
@@ -33,7 +33,7 @@ class RuleEvaluator
                 $delaySeconds = $timingEnabled ? (int)($rule['delaySeconds'] ?? 0) * (int)($rule['delayUnit'] ?? 1) : 0;
 
                 $heatupStatus = $this->timing->checkHeatup($stateKey, $delaySeconds);
-                if ($heatupStatus !== 'passed') {
+                if (!TimingEvaluator::isHeatupPassed($heatupStatus)) {
                     if ($isFirstMatch && !$skipHeatup) {
                         return ($rule['name'] ?? '') . ' (heatup)';
                     }
@@ -41,17 +41,22 @@ class RuleEvaluator
                     continue;
                 }
 
-                $intervalSeconds = $timingEnabled ? (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1) : 0;
-                if (!$this->timing->checkInterval($stateKey, $intervalSeconds)) {
-                    if ($isFirstMatch && !$skipInterval) {
-                        return null;
-                    }
-                    continue;
-                }
+                // Timing-Pass: nur der Moment des Vorlauf-Ablaufs darf schalten.
+                $shouldExecute = !$timingOnly || $heatupStatus === 'elapsed';
 
-                $this->executeActions($rule);
-                $this->timing->markActive($stateKey, $cooldownReset);
-                $this->timing->markLastRun($stateKey);
+                if ($shouldExecute) {
+                    $intervalSeconds = $timingEnabled ? (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1) : 0;
+                    if (!$this->timing->checkInterval($stateKey, $intervalSeconds)) {
+                        if ($isFirstMatch && !$skipInterval) {
+                            return null;
+                        }
+                        continue;
+                    }
+
+                    $this->executeActions($rule);
+                    $this->timing->markActive($stateKey, $cooldownReset);
+                    $this->timing->markLastRun($stateKey);
+                }
 
                 if ($isFirstMatch) {
                     return $rule['name'] ?? null;
@@ -64,7 +69,7 @@ class RuleEvaluator
                 $cooldownSeconds = $timingEnabled ? (int)($rule['cooldownSeconds'] ?? 0) * (int)($rule['cooldownUnit'] ?? 1) : 0;
                 $cooldownStatus = $this->timing->checkCooldown($stateKey, $cooldownSeconds);
 
-                if ($cooldownStatus === 'started' || $cooldownStatus === 'active') {
+                if (!TimingEvaluator::isCooldownOver($cooldownStatus)) {
                     if ($skipCooldown) {
                         continue;
                     }
@@ -75,19 +80,25 @@ class RuleEvaluator
                     continue;
                 }
 
-                if ($cooldownStatus === 'expired') {
-                    $this->timing->markInactive($stateKey);
-                    if ($fallbackEnabled && $this->executeFallbackActions($rule)) {
-                        if ($isFirstMatch) {
-                            return ($rule['name'] ?? '') . ' (fallback)';
-                        }
-                        $activeRuleName = ($rule['name'] ?? '') . ' (fallback)';
+                $this->timing->markInactive($stateKey);
+                // Timing-Pass: nur der Moment des Nachlauf-Ablaufs darf abschalten.
+                $shouldFallback = !$timingOnly || $cooldownStatus === 'elapsed';
+                if ($shouldFallback && $fallbackEnabled && $this->executeFallbackActions($rule)) {
+                    if ($isFirstMatch) {
+                        return ($rule['name'] ?? '') . ' (fallback)';
                     }
+                    $activeRuleName = ($rule['name'] ?? '') . ' (fallback)';
                 }
             }
         }
 
         return $activeRuleName;
+    }
+
+    /** @return array{heatup: bool, cooldown: bool} */
+    public function getPendingPhases(): array
+    {
+        return $this->timing->getPendingPhases();
     }
 
     public static function ruleKey(array $rule, int $index = -1): string
