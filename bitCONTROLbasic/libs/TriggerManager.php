@@ -5,6 +5,7 @@ declare(strict_types=1);
 class TriggerManager
 {
     private const EVENT_PREFIX = 'BIT_';
+    private const TIMING_EVENT_PREFIX = self::EVENT_PREFIX . 'Timing_';
     private int $instanceID;
 
     public function __construct(int $instanceID)
@@ -24,6 +25,145 @@ class TriggerManager
                 $this->createCyclicTrigger($trigger);
             }
         }
+    }
+
+    /**
+     * Keeps one one-shot cyclic event per timed entry in sync with $schedule.
+     *
+     * A timestamp in the future is programmed as it is. A timestamp in the past means the
+     * expiry was missed (module down, Symcon restart). It then fires exactly once: if the
+     * event's `LastRun` is older than the expiry, the event is re-armed to `now + 2`;
+     * if `LastRun` is at or after the expiry it has already fired for it and is only
+     * switched off. Without that check every evaluation would re-arm the same past expiry
+     * and the event would loop every two seconds.
+     *
+     * A phase end that falls into the repeated hour of a DST fall-back is ambiguous as a local
+     * wall clock time; it is shifted by one hour so the programmed components address the
+     * intended instant instead of the earlier one (see applyTimingSchedule()).
+     *
+     * @param array<string, ?int> $schedule eventName => unix timestamp of the next
+     *                                       occurrence, or null to deactivate.
+     */
+    public function syncTimingEvents(array $schedule): void
+    {
+        $existing = $this->getTimingEventsByName();
+
+        foreach ($schedule as $name => $timestamp) {
+            $eventID = $existing[$name] ?? 0;
+            unset($existing[$name]);
+
+            if ($eventID === 0) {
+                $eventID = $this->createTimingEvent($name);
+                if ($eventID === 0) {
+                    continue;
+                }
+            }
+
+            $this->applyTimingSchedule($eventID, $timestamp);
+        }
+
+        foreach ($existing as $eventID) {
+            IPS_DeleteEvent($eventID);
+        }
+    }
+
+    /** @return array<string, int> eventName => eventID for existing BIT_Timing_* events */
+    private function getTimingEventsByName(): array
+    {
+        $events = [];
+        foreach (IPS_GetChildrenIDs($this->instanceID) as $childID) {
+            $obj = IPS_GetObject($childID);
+            $name = $obj['ObjectName'] ?? '';
+            if (($obj['ObjectType'] ?? -1) === 4 && str_starts_with($name, self::TIMING_EVENT_PREFIX)) {
+                $events[$name] = $childID;
+            }
+        }
+        return $events;
+    }
+
+    private function createTimingEvent(string $name): int
+    {
+        $eventID = IPS_CreateEvent(1);
+        if ($eventID === false) {
+            IPS_LogMessage('bitCONTROL', sprintf('Instance %d: Failed to create timing event %s', $this->instanceID, $name));
+            return 0;
+        }
+
+        IPS_SetParent($eventID, $this->instanceID);
+        IPS_SetName($eventID, $name);
+        IPS_SetHidden($eventID, true);
+        IPS_SetEventScript($eventID, 'BIT_EvaluateTiming(' . $this->instanceID . ');');
+        IPS_SetEventActive($eventID, false);
+
+        return $eventID;
+    }
+
+    private function applyTimingSchedule(int $eventID, ?int $timestamp): void
+    {
+        $event = IPS_GetEvent($eventID);
+        $active = (bool)($event['EventActive'] ?? false);
+
+        if ($timestamp === null) {
+            if ($active) {
+                IPS_SetEventActive($eventID, false);
+            }
+            return;
+        }
+
+        $now = time();
+        if ($timestamp <= $now) {
+            // Verpasster Ablauf: nur einmal nachholen, nie erneut scharf schalten.
+            if ((int)($event['LastRun'] ?? 0) >= $timestamp) {
+                if ($active) {
+                    IPS_SetEventActive($eventID, false);
+                }
+                return;
+            }
+            $timestamp = $now + 2;
+        }
+
+        $day    = (int)date('j', $timestamp);
+        $month  = (int)date('n', $timestamp);
+        $year   = (int)date('Y', $timestamp);
+        $hour   = (int)date('G', $timestamp);
+        $minute = (int)date('i', $timestamp);
+        $second = (int)date('s', $timestamp);
+
+        // DST fall-back: in the repeated hour the local time is ambiguous and mktime() resolves
+        // it to the earlier instant. Symcon programs the event from exactly these components, so
+        // it would fire an hour too early. Shifting the expiry once by that difference makes the
+        // wall clock unambiguous again: the phase end fires up to an hour late, but exactly once.
+        // The shifted timestamp round-trips, so this can never loop.
+        $roundTrip = mktime($hour, $minute, $second, $month, $day, $year);
+        if ($roundTrip !== $timestamp) {
+            $timestamp += ($timestamp - $roundTrip);
+            $day    = (int)date('j', $timestamp);
+            $month  = (int)date('n', $timestamp);
+            $year   = (int)date('Y', $timestamp);
+            $hour   = (int)date('G', $timestamp);
+            $minute = (int)date('i', $timestamp);
+            $second = (int)date('s', $timestamp);
+        }
+
+        $dateFrom = $event['CyclicDateFrom'] ?? [];
+        $timeFrom = $event['CyclicTimeFrom'] ?? [];
+
+        $unchanged = $active
+            && (int)($dateFrom['Day'] ?? -1) === $day
+            && (int)($dateFrom['Month'] ?? -1) === $month
+            && (int)($dateFrom['Year'] ?? -1) === $year
+            && (int)($timeFrom['Hour'] ?? -1) === $hour
+            && (int)($timeFrom['Minute'] ?? -1) === $minute
+            && (int)($timeFrom['Second'] ?? -1) === $second;
+
+        if ($unchanged) {
+            return;
+        }
+
+        IPS_SetEventCyclic($eventID, 1, 0, 0, 0, 0, 0);
+        IPS_SetEventCyclicDateFrom($eventID, $day, $month, $year);
+        IPS_SetEventCyclicTimeFrom($eventID, $hour, $minute, $second);
+        IPS_SetEventActive($eventID, true);
     }
 
     public function buildAliasMap(array $triggers): array
@@ -80,6 +220,9 @@ class TriggerManager
         foreach (IPS_GetChildrenIDs($this->instanceID) as $childID) {
             $obj = IPS_GetObject($childID);
             if ($obj['ObjectType'] === 4 && str_starts_with($obj['ObjectName'], self::EVENT_PREFIX)) {
+                if ($this->isTimingEventName($obj['ObjectName'])) {
+                    continue;
+                }
                 $event = IPS_GetEvent($childID);
                 if (!$event['EventActive'] && $event['EventLimit'] > 0) {
                     $alias = substr($obj['ObjectName'], strlen(self::EVENT_PREFIX));
@@ -88,6 +231,11 @@ class TriggerManager
             }
         }
         return $deactivated;
+    }
+
+    private function isTimingEventName(string $name): bool
+    {
+        return str_starts_with($name, self::TIMING_EVENT_PREFIX);
     }
 
     public function removeAllEvents(): void

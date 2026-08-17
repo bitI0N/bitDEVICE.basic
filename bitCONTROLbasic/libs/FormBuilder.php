@@ -130,7 +130,7 @@ class FormBuilder
         return $day . ', ' . $time;
     }
 
-    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1): array
+    public static function build(int $mode, array $allTriggers, array $eventTriggers, array $rules, array $formulaOutputs, array $expertOutputs, int $formulaEvaluation = 1, int $ruleEvaluation = 1, array $deactivatedByLimit = [], array $combinedOrder = [], int $combinedEvaluation = 1, array $timingState = [], ?int $now = null): array
     {
         $elements = [];
 
@@ -168,11 +168,11 @@ class FormBuilder
 
         switch ($mode) {
             case 0:
-                $elements = array_merge($elements, self::buildRuleElements($rules, $ruleEvaluation));
+                $elements = array_merge($elements, self::buildRuleElements($rules, $ruleEvaluation, $timingState, $now));
                 break;
             case 1:
                 if (ProLoader::has('formula')) {
-                    $elements = array_merge($elements, self::buildFormulaElements($eventTriggers, $formulaOutputs, $formulaEvaluation));
+                    $elements = array_merge($elements, self::buildFormulaElements($eventTriggers, $formulaOutputs, $formulaEvaluation, $timingState, $now));
                 } else {
                     $elements[] = ['type' => 'Label', 'caption' => self::t('Formula mode requires bitCONTROL Plus.'), 'bold' => true, 'color' => 0xCC8800];
                 }
@@ -186,7 +186,7 @@ class FormBuilder
                 break;
             case 3:
                 if (ProLoader::has('combined')) {
-                    $elements = array_merge($elements, self::buildCombinedElements($rules, $formulaOutputs, $combinedOrder, $combinedEvaluation));
+                    $elements = array_merge($elements, self::buildCombinedElements($rules, $formulaOutputs, $combinedOrder, $combinedEvaluation, $timingState, $now));
                 } else {
                     $elements[] = ['type' => 'Label', 'caption' => self::t('Combined mode requires bitCONTROL Pro.'), 'bold' => true, 'color' => 0xCC8800];
                 }
@@ -270,183 +270,185 @@ class FormBuilder
         $maxDisplay = ProLoader::has('limiter') ? self::t('unlimited') : (string)$maxTriggers;
         $caption = self::t('Triggers') . ' (' . count($triggers) . ' / ' . $maxDisplay . ')';
 
+        $panelItems = [
+            [
+                'type'        => 'List',
+                'name'        => 'Triggers',
+                'add'         => !$triggerAtLimit,
+                'delete'      => true,
+                'changeOrder' => true,
+                'rowCount'    => 5,
+                'form'        => ['return BIT_UIGetTriggerPopupForm($id, $Triggers);'],
+                'values'      => $values,
+                'columns'     => [
+                    [
+                        'caption' => 'Active',
+                        'name'    => 'active',
+                        'width'   => '50px',
+                        'add'     => true,
+                        'edit'    => ['type' => 'CheckBox'],
+                    ],
+                    [
+                        'caption' => 'Type',
+                        'name'    => 'type',
+                        'width'   => '80px',
+                        'add'     => 'event',
+                        'edit'    => [
+                            'type'     => 'Select',
+                            'options'  => [
+                                ['caption' => 'Event', 'value' => 'event'],
+                                ['caption' => 'Cyclic', 'value' => 'cyclic'],
+                            ],
+                            'onChange' => 'BIT_UIToggleTriggerType($id, $type);',
+                        ],
+                    ],
+                    [
+                        'caption' => 'Variable',
+                        'name'    => 'variableID',
+                        'width'   => '200px',
+                        'add'     => 0,
+                        'edit'    => ['type' => 'SelectVariable'],
+                    ],
+                    [
+                        'caption' => 'Trigger',
+                        'name'    => 'eventType',
+                        'width'   => '140px',
+                        'add'     => 1,
+                        'edit'    => [
+                            'type'    => 'Select',
+                            'options' => [
+                                ['caption' => 'On Change', 'value' => 1],
+                                ['caption' => 'On Update', 'value' => 0],
+                                ['caption' => 'Limit Exceed', 'value' => 2],
+                                ['caption' => 'Limit Drop', 'value' => 3],
+                                ['caption' => 'Specific Value', 'value' => 4],
+                            ],
+                        ],
+                    ],
+                    [
+                        'caption' => '',
+                        'name'    => 'threshold',
+                        'width'   => '0px',
+                        'add'     => '',
+                        'visible' => false,
+                        'edit'    => ['type' => 'ValidationTextBox'],
+                    ],
+                    [
+                        'caption' => '',
+                        'name'    => 'triggerRepeat',
+                        'width'   => '0px',
+                        'add'     => 0,
+                        'visible' => false,
+                        'edit'    => ['type' => 'Select', 'options' => [
+                            ['caption' => 'Once on first condition match', 'value' => 0],
+                            ['caption' => 'On each update while condition met', 'value' => 1],
+                        ]],
+                    ],
+                    [
+                        'caption' => '',
+                        'name'    => 'triggerLimit',
+                        'width'   => '0px',
+                        'add'     => 0,
+                        'visible' => false,
+                        'edit'    => ['type' => 'NumberSpinner', 'minimum' => 0],
+                    ],
+                    [
+                        'caption' => '',
+                        'name'    => 'triggerConditions',
+                        'width'   => '0px',
+                        'add'     => '[]',
+                        'visible' => false,
+                        'edit'    => ['type' => 'SelectCondition', 'multi' => true],
+                    ],
+                    [
+                        'caption' => 'Alias',
+                        'name'    => 'alias',
+                        'width'   => '100px',
+                        'add'     => '',
+                        'edit'    => ['type' => 'ValidationTextBox'],
+                    ],
+                    [
+                        'caption' => 'Status',
+                        'name'    => 'triggerStatus',
+                        'width'   => 'auto',
+                        'add'     => '',
+                    ],
+                    ['caption' => 'Day Pattern', 'name' => 'dayPattern', 'width' => '0px', 'add' => 0, 'visible' => false,
+                        'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => 'Day Interval', 'value' => 0], ['caption' => 'Week Interval', 'value' => 1],
+                            ['caption' => 'Month Interval', 'value' => 2], ['caption' => 'One Day per Year', 'value' => 3],
+                            ['caption' => 'Specific Date', 'value' => 4],
+                        ], 'onChange' => 'BIT_UIToggleCyclicFields($id, $dayPattern);']],
+                    ['caption' => 'Every', 'name' => 'dayInterval', 'width' => '0px', 'add' => 1, 'visible' => false,
+                        'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'suffix' => ' Tag(e)']],
+                    ['caption' => 'Mo', 'name' => 'wdMon', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'Tu', 'name' => 'wdTue', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'We', 'name' => 'wdWed', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'Th', 'name' => 'wdThu', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'Fr', 'name' => 'wdFri', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'Sa', 'name' => 'wdSat', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'Su', 'name' => 'wdSun', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => 'On', 'name' => 'monthOrdinal', 'width' => '0px', 'add' => 1, 'visible' => false,
+                        'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => '1.', 'value' => 1], ['caption' => '2.', 'value' => 2],
+                            ['caption' => '3.', 'value' => 3], ['caption' => '4.', 'value' => 4],
+                            ['caption' => 'Last.', 'value' => 5],
+                        ]]],
+                    ['caption' => 'Day Type', 'name' => 'monthDayType', 'width' => '0px', 'add' => 0, 'visible' => false,
+                        'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => 'Day', 'value' => 0], ['caption' => 'Weekday', 'value' => 1],
+                            ['caption' => 'Monday', 'value' => 2], ['caption' => 'Tuesday', 'value' => 3],
+                            ['caption' => 'Wednesday', 'value' => 4], ['caption' => 'Thursday', 'value' => 5],
+                            ['caption' => 'Friday', 'value' => 6], ['caption' => 'Saturday', 'value' => 7],
+                            ['caption' => 'Sunday', 'value' => 8],
+                        ]]],
+                    ['caption' => 'Day', 'name' => 'yearDay', 'width' => '0px', 'add' => 1, 'visible' => false,
+                        'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 31]],
+                    ['caption' => 'Month', 'name' => 'yearMonth', 'width' => '0px', 'add' => 1, 'visible' => false,
+                        'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => 'January', 'value' => 1], ['caption' => 'February', 'value' => 2],
+                            ['caption' => 'March', 'value' => 3], ['caption' => 'April', 'value' => 4],
+                            ['caption' => 'May', 'value' => 5], ['caption' => 'June', 'value' => 6],
+                            ['caption' => 'July', 'value' => 7], ['caption' => 'August', 'value' => 8],
+                            ['caption' => 'September', 'value' => 9], ['caption' => 'October', 'value' => 10],
+                            ['caption' => 'November', 'value' => 11], ['caption' => 'December', 'value' => 12],
+                        ]]],
+                    ['caption' => 'From', 'name' => 'dateFrom', 'width' => '0px',
+                        'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
+                        'visible' => false, 'edit' => ['type' => 'SelectDate']],
+                    ['caption' => 'Unlimited', 'name' => 'unlimited', 'width' => '0px', 'add' => true, 'visible' => false,
+                        'edit' => ['type' => 'CheckBox', 'onChange' => 'BIT_UIToggleUnlimited($id, $unlimited);']],
+                    ['caption' => 'To', 'name' => 'dateTo', 'width' => '0px',
+                        'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
+                        'visible' => false, 'edit' => ['type' => 'SelectDate']],
+                    ['caption' => 'On', 'name' => 'specificDate', 'width' => '0px',
+                        'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
+                        'visible' => false, 'edit' => ['type' => 'SelectDate']],
+                    ['caption' => 'Time Pattern', 'name' => 'timePattern', 'width' => '0px', 'add' => 0, 'visible' => false,
+                        'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => 'At Specific Time', 'value' => 0], ['caption' => 'Every Second', 'value' => 1],
+                            ['caption' => 'Every Minute', 'value' => 2], ['caption' => 'Every Hour', 'value' => 3],
+                        ], 'onChange' => 'BIT_UIToggleTimePattern($id, $timePattern);']],
+                    ['caption' => 'At', 'name' => 'timeValue', 'width' => '0px',
+                        'add' => ['hour' => 6, 'minute' => 0, 'second' => 0],
+                        'visible' => false, 'edit' => ['type' => 'SelectTime']],
+                    ['caption' => 'Every', 'name' => 'timeInterval', 'width' => '0px', 'add' => 1, 'visible' => false,
+                        'edit' => ['type' => 'NumberSpinner', 'minimum' => 1]],
+                    ['caption' => 'From', 'name' => 'timeFrom', 'width' => '0px',
+                        'add' => ['hour' => 6, 'minute' => 0, 'second' => 0],
+                        'visible' => false, 'edit' => ['type' => 'SelectTime']],
+                    ['caption' => 'To', 'name' => 'timeTo', 'width' => '0px',
+                        'add' => ['hour' => 22, 'minute' => 0, 'second' => 0],
+                        'visible' => false, 'edit' => ['type' => 'SelectTime']],
+                ],
+            ],
+        ];
+
         return [
             'type'     => 'ExpansionPanel',
             'caption'  => $caption,
             'expanded' => true,
-            'items'    => [
-                [
-                    'type'        => 'List',
-                    'name'        => 'Triggers',
-                    'add'         => !$triggerAtLimit,
-                    'delete'      => true,
-                    'changeOrder' => true,
-                    'rowCount'    => 5,
-                    'form'        => ['return BIT_UIGetTriggerPopupForm($id, $Triggers);'],
-                    'values'      => $values,
-                    'columns'     => [
-                        [
-                            'caption' => 'Active',
-                            'name'    => 'active',
-                            'width'   => '50px',
-                            'add'     => true,
-                            'edit'    => ['type' => 'CheckBox'],
-                        ],
-                        [
-                            'caption' => 'Type',
-                            'name'    => 'type',
-                            'width'   => '80px',
-                            'add'     => 'event',
-                            'edit'    => [
-                                'type'     => 'Select',
-                                'options'  => [
-                                    ['caption' => 'Event', 'value' => 'event'],
-                                    ['caption' => 'Cyclic', 'value' => 'cyclic'],
-                                ],
-                                'onChange' => 'BIT_UIToggleTriggerType($id, $type);',
-                            ],
-                        ],
-                        [
-                            'caption' => 'Variable',
-                            'name'    => 'variableID',
-                            'width'   => '200px',
-                            'add'     => 0,
-                            'edit'    => ['type' => 'SelectVariable'],
-                        ],
-                        [
-                            'caption' => 'Trigger',
-                            'name'    => 'eventType',
-                            'width'   => '140px',
-                            'add'     => 1,
-                            'edit'    => [
-                                'type'    => 'Select',
-                                'options' => [
-                                    ['caption' => 'On Change', 'value' => 1],
-                                    ['caption' => 'On Update', 'value' => 0],
-                                    ['caption' => 'Limit Exceed', 'value' => 2],
-                                    ['caption' => 'Limit Drop', 'value' => 3],
-                                    ['caption' => 'Specific Value', 'value' => 4],
-                                ],
-                            ],
-                        ],
-                        [
-                            'caption' => '',
-                            'name'    => 'threshold',
-                            'width'   => '0px',
-                            'add'     => '',
-                            'visible' => false,
-                            'edit'    => ['type' => 'ValidationTextBox'],
-                        ],
-                        [
-                            'caption' => '',
-                            'name'    => 'triggerRepeat',
-                            'width'   => '0px',
-                            'add'     => 0,
-                            'visible' => false,
-                            'edit'    => ['type' => 'Select', 'options' => [
-                                ['caption' => 'Once on first condition match', 'value' => 0],
-                                ['caption' => 'On each update while condition met', 'value' => 1],
-                            ]],
-                        ],
-                        [
-                            'caption' => '',
-                            'name'    => 'triggerLimit',
-                            'width'   => '0px',
-                            'add'     => 0,
-                            'visible' => false,
-                            'edit'    => ['type' => 'NumberSpinner', 'minimum' => 0],
-                        ],
-                        [
-                            'caption' => '',
-                            'name'    => 'triggerConditions',
-                            'width'   => '0px',
-                            'add'     => '[]',
-                            'visible' => false,
-                            'edit'    => ['type' => 'SelectCondition', 'multi' => true],
-                        ],
-                        [
-                            'caption' => 'Alias',
-                            'name'    => 'alias',
-                            'width'   => '100px',
-                            'add'     => '',
-                            'edit'    => ['type' => 'ValidationTextBox'],
-                        ],
-                        [
-                            'caption' => 'Status',
-                            'name'    => 'triggerStatus',
-                            'width'   => 'auto',
-                            'add'     => '',
-                        ],
-                        ['caption' => 'Day Pattern', 'name' => 'dayPattern', 'width' => '0px', 'add' => 0, 'visible' => false,
-                            'edit' => ['type' => 'Select', 'options' => [
-                                ['caption' => 'Day Interval', 'value' => 0], ['caption' => 'Week Interval', 'value' => 1],
-                                ['caption' => 'Month Interval', 'value' => 2], ['caption' => 'One Day per Year', 'value' => 3],
-                                ['caption' => 'Specific Date', 'value' => 4],
-                            ], 'onChange' => 'BIT_UIToggleCyclicFields($id, $dayPattern);']],
-                        ['caption' => 'Every', 'name' => 'dayInterval', 'width' => '0px', 'add' => 1, 'visible' => false,
-                            'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'suffix' => ' Tag(e)']],
-                        ['caption' => 'Mo', 'name' => 'wdMon', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Tu', 'name' => 'wdTue', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'We', 'name' => 'wdWed', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Th', 'name' => 'wdThu', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Fr', 'name' => 'wdFri', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Sa', 'name' => 'wdSat', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Su', 'name' => 'wdSun', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'On', 'name' => 'monthOrdinal', 'width' => '0px', 'add' => 1, 'visible' => false,
-                            'edit' => ['type' => 'Select', 'options' => [
-                                ['caption' => '1.', 'value' => 1], ['caption' => '2.', 'value' => 2],
-                                ['caption' => '3.', 'value' => 3], ['caption' => '4.', 'value' => 4],
-                                ['caption' => 'Last.', 'value' => 5],
-                            ]]],
-                        ['caption' => 'Day Type', 'name' => 'monthDayType', 'width' => '0px', 'add' => 0, 'visible' => false,
-                            'edit' => ['type' => 'Select', 'options' => [
-                                ['caption' => 'Day', 'value' => 0], ['caption' => 'Weekday', 'value' => 1],
-                                ['caption' => 'Monday', 'value' => 2], ['caption' => 'Tuesday', 'value' => 3],
-                                ['caption' => 'Wednesday', 'value' => 4], ['caption' => 'Thursday', 'value' => 5],
-                                ['caption' => 'Friday', 'value' => 6], ['caption' => 'Saturday', 'value' => 7],
-                                ['caption' => 'Sunday', 'value' => 8],
-                            ]]],
-                        ['caption' => 'Day', 'name' => 'yearDay', 'width' => '0px', 'add' => 1, 'visible' => false,
-                            'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 31]],
-                        ['caption' => 'Month', 'name' => 'yearMonth', 'width' => '0px', 'add' => 1, 'visible' => false,
-                            'edit' => ['type' => 'Select', 'options' => [
-                                ['caption' => 'January', 'value' => 1], ['caption' => 'February', 'value' => 2],
-                                ['caption' => 'March', 'value' => 3], ['caption' => 'April', 'value' => 4],
-                                ['caption' => 'May', 'value' => 5], ['caption' => 'June', 'value' => 6],
-                                ['caption' => 'July', 'value' => 7], ['caption' => 'August', 'value' => 8],
-                                ['caption' => 'September', 'value' => 9], ['caption' => 'October', 'value' => 10],
-                                ['caption' => 'November', 'value' => 11], ['caption' => 'December', 'value' => 12],
-                            ]]],
-                        ['caption' => 'From', 'name' => 'dateFrom', 'width' => '0px',
-                            'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
-                            'visible' => false, 'edit' => ['type' => 'SelectDate']],
-                        ['caption' => 'Unlimited', 'name' => 'unlimited', 'width' => '0px', 'add' => true, 'visible' => false,
-                            'edit' => ['type' => 'CheckBox', 'onChange' => 'BIT_UIToggleUnlimited($id, $unlimited);']],
-                        ['caption' => 'To', 'name' => 'dateTo', 'width' => '0px',
-                            'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
-                            'visible' => false, 'edit' => ['type' => 'SelectDate']],
-                        ['caption' => 'On', 'name' => 'specificDate', 'width' => '0px',
-                            'add' => ['year' => (int)date('Y'), 'month' => (int)date('m'), 'day' => (int)date('d')],
-                            'visible' => false, 'edit' => ['type' => 'SelectDate']],
-                        ['caption' => 'Time Pattern', 'name' => 'timePattern', 'width' => '0px', 'add' => 0, 'visible' => false,
-                            'edit' => ['type' => 'Select', 'options' => [
-                                ['caption' => 'At Specific Time', 'value' => 0], ['caption' => 'Every Second', 'value' => 1],
-                                ['caption' => 'Every Minute', 'value' => 2], ['caption' => 'Every Hour', 'value' => 3],
-                            ], 'onChange' => 'BIT_UIToggleTimePattern($id, $timePattern);']],
-                        ['caption' => 'At', 'name' => 'timeValue', 'width' => '0px',
-                            'add' => ['hour' => 6, 'minute' => 0, 'second' => 0],
-                            'visible' => false, 'edit' => ['type' => 'SelectTime']],
-                        ['caption' => 'Every', 'name' => 'timeInterval', 'width' => '0px', 'add' => 1, 'visible' => false,
-                            'edit' => ['type' => 'NumberSpinner', 'minimum' => 1]],
-                        ['caption' => 'From', 'name' => 'timeFrom', 'width' => '0px',
-                            'add' => ['hour' => 6, 'minute' => 0, 'second' => 0],
-                            'visible' => false, 'edit' => ['type' => 'SelectTime']],
-                        ['caption' => 'To', 'name' => 'timeTo', 'width' => '0px',
-                            'add' => ['hour' => 22, 'minute' => 0, 'second' => 0],
-                            'visible' => false, 'edit' => ['type' => 'SelectTime']],
-                    ],
-                ],
-            ],
+            'items'    => $panelItems,
         ];
     }
 
@@ -457,6 +459,51 @@ class FormBuilder
         }
         $labels = [1 => 's', 60 => 'min', 3600 => 'h'];
         return $seconds . ' ' . ($labels[$unit] ?? 's');
+    }
+
+    /**
+     * @param bool $timer entry has its own one-shot timing event → mark the cell with ⏱
+     */
+    public static function formatTimedDuration(int $value, int $unit, int $startTime, ?int $now = null, bool $timer = false): string
+    {
+        $base = self::formatDuration($value, $unit);
+        if ($timer && $value > 0) {
+            $base .= ' ⏱';
+        }
+        if ($value === 0 || $startTime <= 0) {
+            return $base;
+        }
+        $remaining = TimingEvaluator::remainingSeconds($startTime, $value * $unit, $now);
+        if ($remaining <= 0) {
+            return $base;
+        }
+        return $base . ' · ' . self::t('running') . ', ' . self::t('remaining') . ' ' . self::formatClock($remaining);
+    }
+
+    private static function formatClock(int $seconds): string
+    {
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+        return $h > 0 ? sprintf('%d:%02d:%02d', $h, $m, $s) : sprintf('%d:%02d', $m, $s);
+    }
+
+    /** Ranking comes from RuleEvaluator::stateKeys() — the single source for rule state keys. */
+    private static function ruleStateKeys(array $rules): array
+    {
+        $map = [];
+        foreach (RuleEvaluator::stateKeys($rules) as $entry) {
+            $rule = $entry['rule'];
+            $map[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] = $entry['key'];
+        }
+        return $map;
+    }
+
+    private static function formulaStateKey(array $output): string
+    {
+        $alias = $output['alias'] ?? '';
+        $variableID = $output['variableID'] ?? 0;
+        return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
     }
 
     private static function formatRuleActionDisplay(array $rule): string
@@ -527,10 +574,11 @@ class FormBuilder
         return 'OK';
     }
 
-    private static function buildRuleElements(array $rules = [], int $ruleEvaluation = 1): array
+    private static function buildRuleElements(array $rules = [], int $ruleEvaluation = 1, array $timingState = [], ?int $now = null): array
     {
         $values    = [];
         $seenNames = [];
+        $stateKeys = self::ruleStateKeys($rules);
         foreach ($rules as $rule) {
             $name  = $rule['name'] ?? '';
             $color = '#FFFFFF';
@@ -544,10 +592,12 @@ class FormBuilder
             if ($name !== '' && in_array($name, array_slice($seenNames, 0, -1), true)) {
                 $status = self::t('Duplicate name');
             }
+            $stateKey = $stateKeys[($rule['name'] ?? '') . '#' . ($rule['position'] ?? 0)] ?? '';
+            $timer    = !empty($rule['timerEnabled']) && !empty($rule['active']);
             $values[] = array_merge($rule, [
                 'rowColor'        => $color,
-                'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
-                'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
+                'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                 'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
                 'ruleStatus'      => $status,
             ]);
@@ -578,6 +628,7 @@ class FormBuilder
                     ['caption' => '', 'name' => 'cooldownSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'cooldownUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => '', 'name' => 'cooldownResetOnReactivation', 'width' => '0px', 'add' => true, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => '', 'name' => 'timerEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'intervalSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'intervalUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
@@ -604,7 +655,7 @@ class FormBuilder
         ];
     }
 
-    private static function buildFormulaElements(array $triggers, array $formulaOutputs = [], int $formulaEvaluation = 1): array
+    private static function buildFormulaElements(array $triggers, array $formulaOutputs = [], int $formulaEvaluation = 1, array $timingState = [], ?int $now = null): array
     {
         $aliases = implode(', ', array_filter(array_column($triggers, 'alias')));
 
@@ -651,11 +702,13 @@ class FormBuilder
                 $seenOutputAliases[] = $alias;
             }
 
+            $stateKey = self::formulaStateKey($output);
+            $timer    = !empty($output['timerEnabled']) && !empty($output['active']);
             $values[] = array_merge($output, [
                 'formulaStatus'   => $status,
                 'rowColor'        => $color,
-                'delayDisplay'    => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
-                'cooldownDisplay' => self::formatDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1)),
+                'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                 'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
             ]);
         }
@@ -682,6 +735,7 @@ class FormBuilder
                     ['caption' => '', 'name' => 'cooldownSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'cooldownUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => '', 'name' => 'cooldownResetOnReactivation', 'width' => '0px', 'add' => true, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
+                    ['caption' => '', 'name' => 'timerEnabled', 'width' => '0px', 'add' => false, 'visible' => false, 'edit' => ['type' => 'CheckBox']],
                     ['caption' => '', 'name' => 'intervalSeconds', 'width' => '0px', 'add' => 0, 'visible' => false, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 0]],
                     ['caption' => '', 'name' => 'intervalUnit', 'width' => '0px', 'add' => 1, 'visible' => false, 'edit' => ['type' => 'Select', 'options' => [['caption' => 'Sec.', 'value' => 1], ['caption' => 'Min.', 'value' => 60], ['caption' => 'Hr.', 'value' => 3600]]]],
                     ['caption' => 'Heatup', 'name' => 'delayDisplay', 'width' => '80px', 'add' => '-', 'visible' => ProLoader::has('timing')],
@@ -737,7 +791,7 @@ class FormBuilder
         ];
     }
 
-    private static function buildCombinedElements(array $rules, array $formulaOutputs, array $combinedOrder, int $combinedEvaluation): array
+    private static function buildCombinedElements(array $rules, array $formulaOutputs, array $combinedOrder, int $combinedEvaluation, array $timingState = [], ?int $now = null): array
     {
         $allAliases = array_filter(array_merge(
             array_column($rules, 'name'),
@@ -759,6 +813,8 @@ class FormBuilder
             if ($type === 'rule' && isset($rules[$index])) {
                 $rule = $rules[$index];
                 $ruleStatus = self::computeRuleStatus($rule);
+                $stateKey = RuleEvaluator::ruleKey($rule, 0);
+                $timer    = !empty($rule['timerEnabled']) && !empty($rule['active']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Rule'),
@@ -766,8 +822,8 @@ class FormBuilder
                     'active'          => !empty($rule['active']),
                     'actionDisplay'   => self::formatRuleActionDisplay($rule),
                     'conditionDisplay' => $rule['conditions'] ?? '[]',
-                    'delayDisplay'    => self::formatDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1)),
-                    'cooldownDisplay' => self::formatDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1)),
+                    'delayDisplay'    => self::formatTimedDuration((int)($rule['delaySeconds'] ?? 0), (int)($rule['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                    'cooldownDisplay' => self::formatTimedDuration((int)($rule['cooldownSeconds'] ?? 0), (int)($rule['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                     'intervalDisplay' => self::formatDuration((int)($rule['intervalSeconds'] ?? 0), (int)($rule['intervalUnit'] ?? 1)),
                     'statusDisplay'   => $ruleStatus,
                     'rowColor'        => empty($rule['active']) ? '#EEEEEE' : ($ruleStatus === 'OK' ? '#FFFFFF' : '#FFEECC'),
@@ -776,6 +832,8 @@ class FormBuilder
                 $output = $formulaOutputs[$index];
                 $status = self::computeFormulaStatus($output, $allAliases);
                 $color = empty($output['active']) ? '#EEEEEE' : ($status === 'OK' ? '#FFFFFF' : '#FFCCCC');
+                $stateKey = self::formulaStateKey($output);
+                $timer    = !empty($output['timerEnabled']) && !empty($output['active']);
                 $values[] = array_merge($entry, [
                     'position'        => $position + 1,
                     'entryType'       => self::t('Formula'),
@@ -783,8 +841,8 @@ class FormBuilder
                     'active'          => !empty($output['active']),
                     'actionDisplay'   => self::formatFormulaActionDisplay($output),
                     'conditionDisplay' => $output['conditions'] ?? '[]',
-                    'delayDisplay'    => self::formatDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1)),
-                    'cooldownDisplay' => self::formatDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1)),
+                    'delayDisplay'    => self::formatTimedDuration((int)($output['delaySeconds'] ?? 0), (int)($output['delayUnit'] ?? 1), (int)($timingState['HeatupStart_' . $stateKey] ?? 0), $now, $timer),
+                    'cooldownDisplay' => self::formatTimedDuration((int)($output['cooldownSeconds'] ?? 0), (int)($output['cooldownUnit'] ?? 1), (int)($timingState['CooldownStart_' . $stateKey] ?? 0), $now, $timer),
                     'intervalDisplay' => self::formatDuration((int)($output['intervalSeconds'] ?? 0), (int)($output['intervalUnit'] ?? 1)),
                     'statusDisplay'   => $status,
                     'rowColor'        => $color,
@@ -861,6 +919,7 @@ class FormBuilder
                     ]],
                     ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation')],
                 ]],
+                ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('End heatup and cooldown automatically'), 'visible' => ProLoader::has('timing')],
             ]],
             ['type' => 'SelectAction', 'name' => 'actions', 'multi' => true, 'caption' => 'Actions'],
             ['type' => 'CheckBox', 'name' => 'fallbackEnabled', 'caption' => self::t('Fallback Actions'), 'visible' => ProLoader::has('limiter'),
@@ -909,6 +968,7 @@ class FormBuilder
                     ]],
                     ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation')],
                 ]],
+                ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('End heatup and cooldown automatically')],
             ]],
             ['type' => 'ValidationTextBox', 'name' => 'formula', 'caption' => 'Formula',
                 'validate' => '^.+$',

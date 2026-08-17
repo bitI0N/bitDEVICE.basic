@@ -34,13 +34,20 @@ class TimingEvaluator
             return 'waiting';
         }
 
-        return 'passed';
+        $doneKey = 'HeatupDone_' . $stateKey;
+        if (($this->readState)($doneKey) === 1) {
+            return 'passed';
+        }
+
+        ($this->writeState)($doneKey, 1);
+        return 'elapsed';
     }
 
     public function cancelHeatup(string $stateKey, bool $resetOnInterruption = true): void
     {
         if ($resetOnInterruption) {
             ($this->writeState)('HeatupStart_' . $stateKey, 0);
+            ($this->writeState)('HeatupDone_' . $stateKey, 0);
         }
     }
 
@@ -66,7 +73,26 @@ class TimingEvaluator
             return 'active';
         }
 
-        return 'expired';
+        return 'elapsed';
+    }
+
+    public static function isHeatupPassed(string $status): bool
+    {
+        return $status === 'passed' || $status === 'elapsed';
+    }
+
+    public static function isCooldownOver(string $status): bool
+    {
+        return $status === 'expired' || $status === 'elapsed';
+    }
+
+    public static function remainingSeconds(int $startTime, int $durationSeconds, ?int $now = null): int
+    {
+        if ($startTime <= 0) {
+            return 0;
+        }
+
+        return $startTime + $durationSeconds - ($now ?? time());
     }
 
     public function markActive(string $stateKey, bool $resetCooldownOnReactivation = true): void
@@ -106,7 +132,7 @@ class TimingEvaluator
 
     public function pruneState(array $validKeys, callable $getAllKeys): void
     {
-        $prefixes = ['HeatupStart_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
+        $prefixes = ['HeatupStart_', 'HeatupDone_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
         $allKeys = $getAllKeys();
 
         foreach ($allKeys as $key) {

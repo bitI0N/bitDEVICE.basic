@@ -27,8 +27,10 @@ Vollständiger PHP-Code für komplexe Szenarien. Trigger-Aliase stehen als Varia
 ## Features
 
 - Freie Aliase entkoppeln Logik von Symcon-IDs
-- Vorlaufzeit: Aktion erst nach stabiler Bedingung
-- Nachlaufzeit: Aktion bleibt nach Ende der Bedingung aktiv
+- Vorlauf (Heatup): Aktion erst nach stabil erfüllter Bedingung
+- Nachlauf (Cooldown): Aktion bleibt nach Ende der Bedingung für die eingestellte Zeit aktiv
+- Sperrzeit (Interval): Mindestabstand zwischen zwei Ausführungen derselben Regel/Formel
+- „Vorlauf und Nachlauf automatisch beenden" (Plus/Pro, pro Regel/Formel zuschaltbar): Vorlauf/Nachlauf laufen per einmaligem Symcon-Event ohne neuen Trigger ab
 - Drag & Drop Priorisierung
 - Live-Status (aktive Regel, letzte Auswertung)
 - Validierung von Formeln und Scripts vor dem Speichern

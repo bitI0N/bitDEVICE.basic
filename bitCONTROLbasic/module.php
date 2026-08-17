@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/libs/ProLoader.php';
 require_once __DIR__ . '/libs/AliasValidator.php';
 require_once __DIR__ . '/libs/TimingEvaluator.php';
+require_once __DIR__ . '/libs/TimingSchedule.php';
 require_once __DIR__ . '/libs/RuleEvaluator.php';
 require_once __DIR__ . '/libs/TriggerManager.php';
 require_once __DIR__ . '/libs/FormBuilder.php';
@@ -201,6 +202,7 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         $this->pruneOrphanedState($mode);
+        $this->syncTimers($mode);
 
         if ($mode === 3) {
             $this->syncCombinedOrder();
@@ -225,10 +227,44 @@ class bitCONTROL extends IPSModuleStrict
 
     public function Evaluate(): bool
     {
+        return $this->runEvaluation(false);
+    }
+
+    /**
+     * Entry point of the per-entry one-shot events BIT_Timing_<key>: same flow as
+     * Evaluate(), but only transitions caused by elapsed time execute actions.
+     */
+    public function EvaluateTiming(): bool
+    {
+        return $this->runEvaluation(true);
+    }
+
+    /**
+     * Ein Timer-Event und ein Trigger können auf derselben Sekunde feuern. Die
+     * Elapsed-Latches in TimingEvaluator sind Read-Modify-Write auf demselben
+     * State-Attribut, deshalb wird eine Auswertung pro Instanz serialisiert.
+     */
+    private function runEvaluation(bool $timingOnly): bool
+    {
         if (!$this->ReadPropertyBoolean('Active')) {
             return false;
         }
 
+        $semaphore = 'bitCONTROL_' . $this->InstanceID;
+        if (!IPS_SemaphoreEnter($semaphore, 5000)) {
+            $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', 'skipped: another evaluation is running', 0);
+            return false;
+        }
+
+        try {
+            return $this->runEvaluationLocked($timingOnly);
+        } finally {
+            IPS_SemaphoreLeave($semaphore);
+        }
+    }
+
+    private function runEvaluationLocked(bool $timingOnly): bool
+    {
         $triggers = $this->getAllTriggers();
         $triggerManager = new TriggerManager($this->InstanceID);
         $aliasMap = $triggerManager->buildAliasMap($triggers);
@@ -236,18 +272,95 @@ class bitCONTROL extends IPSModuleStrict
         $this->ensureProLoader();
         $mode = $this->ReadPropertyInteger('Mode');
         $result = match ($mode) {
-            0 => $this->evaluateRules(),
-            1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap) : $this->featureUnavailable('Formula', 'Plus'),
-            2 => ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro'),
-            3 => ProLoader::has('combined') ? $this->evaluateCombined($aliasMap) : $this->featureUnavailable('Combined', 'Pro'),
+            0 => $this->evaluateRules($timingOnly),
+            1 => ProLoader::has('formula') ? $this->evaluateFormulas($aliasMap, $timingOnly) : $this->featureUnavailable('Formula', 'Plus'),
+            2 => $timingOnly ? null : (ProLoader::has('expert') ? $this->evaluateExpert($aliasMap) : $this->featureUnavailable('Expert', 'Pro')),
+            3 => ProLoader::has('combined') ? $this->evaluateCombined($aliasMap, $timingOnly) : $this->featureUnavailable('Combined', 'Pro'),
             default => null,
         };
 
         $this->SetValue('LastEvaluation', time());
-        $this->SetValue('ActiveRule', $result ?? '');
-        $this->SendDebug('Evaluate', $result ?? 'no result', 0);
+        if (!$timingOnly) {
+            $this->SetValue('ActiveRule', $result ?? '');
+        }
+        $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', $result ?? 'no result', 0);
+
+        // Der Zeitplan wird aus dem State abgeleitet, nicht aus dem Auswertungslauf:
+        // erst nach der Auswertung steht fest, welche Phase gerade läuft.
+        $this->syncTimers($mode);
 
         return true;
+    }
+
+    /**
+     * Next expiry per timed entry, derived from the persisted state.
+     *
+     * @return array<string, ?int> eventName => unix timestamp, or null to deactivate
+     */
+    private function timerSchedule(int $mode): array
+    {
+        if (!ProLoader::has('timing')) {
+            return [];
+        }
+
+        $state = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+        $now = time();
+        $schedule = [];
+
+        $add = function (array $entry, string $name, string $stateKey) use (&$schedule, $state, $now): void {
+            // Namenskollision: der erste Eintrag gewinnt. Im Regel-Modus verhindert der
+            // Duplikat-Guard (Status 205) sie ohnehin; im Combined-Modus teilen sich doppelte
+            // oder leere Namen denselben State-Key und damit ein Event (Verhalten wie bisher).
+            if (array_key_exists($name, $schedule)) {
+                return;
+            }
+            $schedule[$name] = TimingSchedule::next($entry, $stateKey, $state, $now);
+        };
+
+        $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
+        $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+
+        if ($mode === 0) {
+            foreach (RuleEvaluator::stateKeys($rules) as $entry) {
+                $rule = $entry['rule'];
+                if (empty($rule['timerEnabled'])) {
+                    continue;
+                }
+                $add($rule, TimingSchedule::eventName(RuleEvaluator::ruleKey($rule)), $entry['key']);
+            }
+        }
+
+        if ($mode === 3) {
+            // Combined wertet jede Regel einzeln aus → ihr State-Key ist immer Rang 0.
+            foreach ($rules as $rule) {
+                if (empty($rule['active']) || empty($rule['timerEnabled'])) {
+                    continue;
+                }
+                $add($rule, TimingSchedule::eventName(RuleEvaluator::ruleKey($rule)), RuleEvaluator::ruleKey($rule, 0));
+            }
+        }
+
+        if ($mode === 1 || $mode === 3) {
+            foreach ($formulaOutputs as $output) {
+                // Dieselbe Vorauswahl wie runFormulaEvaluator(): was nie ausgewertet
+                // wird, kann seinen eigenen State auch nie wieder abräumen.
+                if (empty($output['active']) || ($output['formula'] ?? '') === '' || ($output['variableID'] ?? 0) === 0) {
+                    continue;
+                }
+                if (empty($output['timerEnabled'])) {
+                    continue;
+                }
+                $stateKey = $this->formulaStateKey($output);
+                $add($output, TimingSchedule::eventName($stateKey), $stateKey);
+            }
+        }
+
+        return $schedule;
+    }
+
+    private function syncTimers(int $mode): void
+    {
+        (new TriggerManager($this->InstanceID))->syncTimingEvents($this->timerSchedule($mode));
     }
 
     public function GetActiveRule(): string
@@ -337,12 +450,26 @@ class bitCONTROL extends IPSModuleStrict
         $combinedOrder       = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
         $combinedEvaluation  = $this->ReadPropertyInteger('CombinedEvaluation');
         FormBuilder::setTranslator(fn (string $s) => $this->Translate($s));
-        $form = FormBuilder::build($mode, $triggers, $eventTriggers, $rules, $formulaOutputs, $expertOutputs, $formulaEvaluation, $ruleEvaluation, $deactivatedByLimit, $combinedOrder, $combinedEvaluation);
+        $timingState = json_decode($this->ReadAttributeString($this->stateAttributeForMode($mode)), true) ?: [];
+        $form = FormBuilder::build(
+            $mode,
+            $triggers,
+            $eventTriggers,
+            $rules,
+            $formulaOutputs,
+            $expertOutputs,
+            $formulaEvaluation,
+            $ruleEvaluation,
+            $deactivatedByLimit,
+            $combinedOrder,
+            $combinedEvaluation,
+            $timingState
+        );
 
         return json_encode($form);
     }
 
-    private function evaluateRules(): ?string
+    private function evaluateRules(bool $timingOnly = false): ?string
     {
         $rules          = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('RuleEvaluation');
@@ -351,10 +478,10 @@ class bitCONTROL extends IPSModuleStrict
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('RuleSkipInterval');
 
-        return $this->runRuleEvaluator($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'rule');
+        return $this->runRuleEvaluator($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'rule', $timingOnly);
     }
 
-    private function runRuleEvaluator(array $rules, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    private function runRuleEvaluator(array $rules, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource, bool $timingOnly = false): ?string
     {
         $readState = fn (string $key): int => $this->readState($stateSource, $key);
         $writeState = function (string $key, int $value) use ($stateSource): void {
@@ -362,11 +489,10 @@ class bitCONTROL extends IPSModuleStrict
         };
 
         $evaluator = new RuleEvaluator($this->InstanceID, $readState, $writeState);
-
-        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'));
+        return $evaluator->evaluate($rules, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, ProLoader::has('timing'), ProLoader::has('limiter'), $timingOnly);
     }
 
-    private function evaluateFormulas(array $aliasMap): ?string
+    private function evaluateFormulas(array $aliasMap, bool $timingOnly = false): ?string
     {
         $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('FormulaEvaluation');
@@ -375,10 +501,10 @@ class bitCONTROL extends IPSModuleStrict
         $skipCooldown   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipCooldown');
         $skipInterval   = $hasTiming && $this->ReadPropertyBoolean('FormulaSkipInterval');
 
-        return $this->runFormulaEvaluator($formulaOutputs, $aliasMap, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'formula');
+        return $this->runFormulaEvaluator($formulaOutputs, $aliasMap, $evaluationMode, $skipHeatup, $skipCooldown, $skipInterval, 'formula', $timingOnly);
     }
 
-    private function runFormulaEvaluator(array $formulaOutputs, array $aliasMap, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource): ?string
+    private function runFormulaEvaluator(array $formulaOutputs, array $aliasMap, int $evaluationMode, bool $skipHeatup, bool $skipCooldown, bool $skipInterval, string $stateSource, bool $timingOnly = false): ?string
     {
         $isFirstMatch = $evaluationMode === 0;
 
@@ -409,7 +535,7 @@ class bitCONTROL extends IPSModuleStrict
                 continue;
             }
 
-            $stateKey = preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
+            $stateKey = $this->formulaStateKey($output);
 
             $conditions    = $output['conditions'] ?? '[]';
             $conditionsMet = ($conditions === '' || $conditions === '[]') ? true : (bool)IPS_IsConditionPassing($conditions);
@@ -421,8 +547,19 @@ class bitCONTROL extends IPSModuleStrict
 
             if ($conditionsMet) {
                 $heatupStatus = $timing->checkHeatup($stateKey, $delaySeconds);
-                if ($heatupStatus !== 'passed') {
+                if (!TimingEvaluator::isHeatupPassed($heatupStatus)) {
                     if ($isFirstMatch && !$skipHeatup) {
+                        break;
+                    }
+                    continue;
+                }
+
+                if ($timingOnly && $heatupStatus !== 'elapsed') {
+                    // Poll: nur der Vorlauf-Ablauf schreibt; die Formel bleibt sonst unangetastet.
+                    // Die Nachlauf-Buchhaltung läuft trotzdem mit, sonst bleibt ein alter
+                    // CooldownStart_ stehen und die nächste Abschaltung hält gar nicht.
+                    $timing->markActive($stateKey, $cooldownReset);
+                    if ($isFirstMatch) {
                         break;
                     }
                     continue;
@@ -433,7 +570,7 @@ class bitCONTROL extends IPSModuleStrict
                 $timing->cancelHeatup($stateKey, $heatupReset);
                 $cooldownStatus = $timing->checkCooldown($stateKey, $cooldownSeconds);
 
-                if ($cooldownStatus === 'started' || $cooldownStatus === 'active') {
+                if (!TimingEvaluator::isCooldownOver($cooldownStatus)) {
                     if ($skipCooldown) {
                         continue;
                     }
@@ -443,25 +580,24 @@ class bitCONTROL extends IPSModuleStrict
                     continue;
                 }
 
-                if ($cooldownStatus === 'expired') {
-                    $timing->markInactive($stateKey);
-                    $fallbackFormula = (ProLoader::has('limiter') && !empty($output['fallbackFormulaEnabled'])) ? ($output['fallbackFormula'] ?? '') : '';
-                    if ($fallbackFormula !== '' && $variableID > 0) {
-                        $evalMap = array_merge($aliasMap, $computedOutputs);
-                        if ($alias !== '' && IPS_VariableExists($variableID)) {
-                            $evalMap[$alias] = GetValue($variableID);
-                        }
-                        try {
-                            $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
-                            $this->writeOutput($variableID, $fallbackResult);
-                        } catch (\Throwable $e) {
-                            IPS_LogMessage('bitCONTROL', sprintf(
-                                'Instance %d: Fallback formula failed for "%s": %s',
-                                $this->InstanceID,
-                                $alias ?: (string)$variableID,
-                                $e->getMessage()
-                            ));
-                        }
+                $timing->markInactive($stateKey);
+                $mayFallback = !$timingOnly || $cooldownStatus === 'elapsed';
+                $fallbackFormula = ($mayFallback && ProLoader::has('limiter') && !empty($output['fallbackFormulaEnabled'])) ? ($output['fallbackFormula'] ?? '') : '';
+                if ($fallbackFormula !== '' && $variableID > 0) {
+                    $evalMap = array_merge($aliasMap, $computedOutputs);
+                    if ($alias !== '' && IPS_VariableExists($variableID)) {
+                        $evalMap[$alias] = GetValue($variableID);
+                    }
+                    try {
+                        $fallbackResult = ProLoader::get('formula')->evaluate($fallbackFormula, $evalMap);
+                        $this->writeOutput($variableID, $fallbackResult);
+                    } catch (\Throwable $e) {
+                        IPS_LogMessage('bitCONTROL', sprintf(
+                            'Instance %d: Fallback formula failed for "%s": %s',
+                            $this->InstanceID,
+                            $alias ?: (string)$variableID,
+                            $e->getMessage()
+                        ));
                     }
                 }
                 continue;
@@ -549,7 +685,7 @@ class bitCONTROL extends IPSModuleStrict
         }
     }
 
-    private function evaluateCombined(array $aliasMap): ?string
+    private function evaluateCombined(array $aliasMap, bool $timingOnly = false): ?string
     {
         $combinedOrder  = json_decode($this->ReadPropertyString('CombinedOrder'), true) ?: [];
         $evaluationMode = $this->ReadPropertyInteger('CombinedEvaluation');
@@ -571,7 +707,7 @@ class bitCONTROL extends IPSModuleStrict
             $index = (int)$indexStr;
 
             if ($type === 'rule' && isset($rules[$index])) {
-                $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                $result = $this->runRuleEvaluator([$rules[$index]], 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined', $timingOnly);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
@@ -579,7 +715,7 @@ class bitCONTROL extends IPSModuleStrict
                     }
                 }
             } elseif ($type === 'formula' && isset($formulaOutputs[$index])) {
-                $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined');
+                $result = $this->runFormulaEvaluator([$formulaOutputs[$index]], $aliasMap, 1, $skipHeatup, $skipCooldown, $skipInterval, 'combined', $timingOnly);
                 if ($result !== null) {
                     $results[] = $result;
                     if ($isFirstMatch) {
@@ -667,6 +803,23 @@ class bitCONTROL extends IPSModuleStrict
     private function ensureProLoader(): void
     {
         ProLoader::boot(__DIR__ . '/../bitLICENSEsplitter/data');
+    }
+
+    private function stateAttributeForMode(int $mode): string
+    {
+        return match ($mode) {
+            1 => 'FormulaState',
+            3 => 'CombinedState',
+            default => 'RuleState',
+        };
+    }
+
+    /** The one state key of a formula output — used by evaluation, prune and timers alike. */
+    private function formulaStateKey(array $output): string
+    {
+        $alias = $output['alias'] ?? '';
+        $variableID = $output['variableID'] ?? 0;
+        return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
     }
 
     public function UIGetTriggerPopupForm(mixed $row): array
@@ -1149,7 +1302,7 @@ class bitCONTROL extends IPSModuleStrict
     {
         if ($mode === 0) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
-            $validKeys = array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules));
+            $validKeys = array_column(RuleEvaluator::stateKeys($rules), 'key');
             $state = json_decode($this->ReadAttributeString('RuleState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('RuleState', json_encode($pruned));
@@ -1157,11 +1310,7 @@ class bitCONTROL extends IPSModuleStrict
 
         if ($mode === 1) {
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
-            $validKeys = array_map(function ($o) {
-                $alias = $o['alias'] ?? '';
-                $variableID = $o['variableID'] ?? 0;
-                return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
-            }, $formulaOutputs);
+            $validKeys = array_map(fn ($o) => $this->formulaStateKey($o), $formulaOutputs);
             $state = json_decode($this->ReadAttributeString('FormulaState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
             $this->WriteAttributeString('FormulaState', json_encode($pruned));
@@ -1170,13 +1319,10 @@ class bitCONTROL extends IPSModuleStrict
         if ($mode === 3) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
+            // Combined wertet jede Regel einzeln aus → ihr Key ist immer Rang 0.
             $validKeys = array_merge(
-                array_map(fn ($r, $i) => RuleEvaluator::ruleKey($r, $i), $rules, array_keys($rules)),
-                array_map(function ($o) {
-                    $alias = $o['alias'] ?? '';
-                    $variableID = $o['variableID'] ?? 0;
-                    return preg_replace('/[^a-zA-Z0-9_]/', '_', $alias ?: (string)$variableID);
-                }, $formulaOutputs)
+                array_map(static fn ($r) => RuleEvaluator::ruleKey($r, 0), $rules),
+                array_map(fn ($o) => $this->formulaStateKey($o), $formulaOutputs)
             );
             $state = json_decode($this->ReadAttributeString('CombinedState'), true) ?: [];
             $pruned = $this->pruneStateKeys($state, $validKeys);
@@ -1186,7 +1332,7 @@ class bitCONTROL extends IPSModuleStrict
 
     private function pruneStateKeys(array $state, array $validKeys): array
     {
-        $prefixes = ['HeatupStart_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
+        $prefixes = ['HeatupStart_', 'HeatupDone_', 'WasActive_', 'CooldownStart_', 'LastRun_', 'DelayStart_'];
         $pruned = [];
 
         foreach ($state as $key => $value) {
@@ -1229,6 +1375,11 @@ class bitCONTROL extends IPSModuleStrict
             default => 'RuleState',
         };
         $state = json_decode($this->ReadAttributeString($attribute), true) ?: [];
+        if ((int)($state[$key] ?? 0) === $value) {
+            // Der Timing-Pass schreibt pro Poll unverändertes markInactive/markActive;
+            // ohne diese Schranke würde jedes Mal das ganze Attribut neu serialisiert.
+            return;
+        }
         $state[$key] = $value;
         $this->WriteAttributeString($attribute, json_encode($state));
     }

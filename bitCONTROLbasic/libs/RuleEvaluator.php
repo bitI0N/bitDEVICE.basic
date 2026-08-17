@@ -13,17 +13,15 @@ class RuleEvaluator
         $this->timing = new TimingEvaluator($readState, $writeState);
     }
 
-    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false, bool $timingEnabled = true, bool $fallbackEnabled = true): ?string
+    public function evaluate(array $rules, int $evaluationMode, bool $skipHeatup = false, bool $skipCooldown = false, bool $skipInterval = false, bool $timingEnabled = true, bool $fallbackEnabled = true, bool $timingOnly = false): ?string
     {
         $isFirstMatch = $evaluationMode === 0;
 
-        $activeRules = array_filter($rules, static fn (array $rule) => !empty($rule['active']));
-        usort($activeRules, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
-
         $activeRuleName = null;
 
-        foreach ($activeRules as $index => $rule) {
-            $stateKey = self::ruleKey($rule, $index);
+        foreach (self::stateKeys($rules) as $entry) {
+            $stateKey = $entry['key'];
+            $rule     = $entry['rule'];
             $conditionsMet = $this->checkConditions($rule);
 
             $heatupReset   = (bool)($rule['heatupResetOnInterruption'] ?? true);
@@ -33,7 +31,7 @@ class RuleEvaluator
                 $delaySeconds = $timingEnabled ? (int)($rule['delaySeconds'] ?? 0) * (int)($rule['delayUnit'] ?? 1) : 0;
 
                 $heatupStatus = $this->timing->checkHeatup($stateKey, $delaySeconds);
-                if ($heatupStatus !== 'passed') {
+                if (!TimingEvaluator::isHeatupPassed($heatupStatus)) {
                     if ($isFirstMatch && !$skipHeatup) {
                         return ($rule['name'] ?? '') . ' (heatup)';
                     }
@@ -41,17 +39,28 @@ class RuleEvaluator
                     continue;
                 }
 
-                $intervalSeconds = $timingEnabled ? (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1) : 0;
-                if (!$this->timing->checkInterval($stateKey, $intervalSeconds)) {
-                    if ($isFirstMatch && !$skipInterval) {
-                        return null;
-                    }
-                    continue;
-                }
+                // Timing-Pass: nur der Moment des Vorlauf-Ablaufs darf schalten.
+                $shouldExecute = !$timingOnly || $heatupStatus === 'elapsed';
 
-                $this->executeActions($rule);
-                $this->timing->markActive($stateKey, $cooldownReset);
-                $this->timing->markLastRun($stateKey);
+                if ($shouldExecute) {
+                    $intervalSeconds = $timingEnabled ? (int)($rule['intervalSeconds'] ?? 0) * (int)($rule['intervalUnit'] ?? 1) : 0;
+                    if (!$this->timing->checkInterval($stateKey, $intervalSeconds)) {
+                        if ($isFirstMatch && !$skipInterval) {
+                            return null;
+                        }
+                        continue;
+                    }
+
+                    $this->executeActions($rule);
+                    $this->timing->markActive($stateKey, $cooldownReset);
+                    $this->timing->markLastRun($stateKey);
+                } else {
+                    // Timing-Pass ohne Ablauf: keine Aktionen, kein markLastRun — aber die
+                    // Buchhaltung muss mitlaufen. Sonst behält eine Regel, deren Bedingung
+                    // ohne Trigger wieder wahr wird (z. B. Zeitfenster), ihren alten
+                    // CooldownStart_ und die nächste Abschaltung gilt sofort als abgelaufen.
+                    $this->timing->markActive($stateKey, $cooldownReset);
+                }
 
                 if ($isFirstMatch) {
                     return $rule['name'] ?? null;
@@ -64,7 +73,7 @@ class RuleEvaluator
                 $cooldownSeconds = $timingEnabled ? (int)($rule['cooldownSeconds'] ?? 0) * (int)($rule['cooldownUnit'] ?? 1) : 0;
                 $cooldownStatus = $this->timing->checkCooldown($stateKey, $cooldownSeconds);
 
-                if ($cooldownStatus === 'started' || $cooldownStatus === 'active') {
+                if (!TimingEvaluator::isCooldownOver($cooldownStatus)) {
                     if ($skipCooldown) {
                         continue;
                     }
@@ -75,19 +84,40 @@ class RuleEvaluator
                     continue;
                 }
 
-                if ($cooldownStatus === 'expired') {
-                    $this->timing->markInactive($stateKey);
-                    if ($fallbackEnabled && $this->executeFallbackActions($rule)) {
-                        if ($isFirstMatch) {
-                            return ($rule['name'] ?? '') . ' (fallback)';
-                        }
-                        $activeRuleName = ($rule['name'] ?? '') . ' (fallback)';
+                $this->timing->markInactive($stateKey);
+                // Timing-Pass: nur der Moment des Nachlauf-Ablaufs darf abschalten.
+                $shouldFallback = !$timingOnly || $cooldownStatus === 'elapsed';
+                if ($shouldFallback && $fallbackEnabled && $this->executeFallbackActions($rule)) {
+                    if ($isFirstMatch) {
+                        return ($rule['name'] ?? '') . ' (fallback)';
                     }
+                    $activeRuleName = ($rule['name'] ?? '') . ' (fallback)';
                 }
             }
         }
 
         return $activeRuleName;
+    }
+
+    /**
+     * Die eine Rangfolge der Regel-State-Keys: aktive Regeln, nach `position` sortiert,
+     * 0-basierter Rang. Jeder Ort, der State-Keys braucht (evaluate(), FormBuilder-Anzeige,
+     * Prune in module.php), muss diese Liste benutzen — sonst prunt ApplyChanges Keys,
+     * die die Auswertung gerade benutzt.
+     *
+     * @return list<array{key: string, rule: array}>
+     */
+    public static function stateKeys(array $rules): array
+    {
+        $activeRules = array_filter($rules, static fn (array $rule) => !empty($rule['active']));
+        usort($activeRules, static fn (array $a, array $b) => ($a['position'] ?? 0) <=> ($b['position'] ?? 0));
+
+        $keys = [];
+        foreach ($activeRules as $rank => $rule) {
+            $keys[] = ['key' => self::ruleKey($rule, $rank), 'rule' => $rule];
+        }
+
+        return $keys;
     }
 
     public static function ruleKey(array $rule, int $index = -1): string
