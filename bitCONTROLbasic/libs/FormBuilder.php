@@ -911,7 +911,6 @@ class FormBuilder
                         ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
                     ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption')],
-                    ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('Timer')],
                 ]],
                 ['type' => 'RowLayout', 'visible' => ProLoader::has('timing'), 'items' => [
                     ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0],
@@ -920,6 +919,7 @@ class FormBuilder
                     ]],
                     ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation')],
                 ]],
+                ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('End heatup and cooldown automatically'), 'visible' => ProLoader::has('timing')],
             ]],
             ['type' => 'SelectAction', 'name' => 'actions', 'multi' => true, 'caption' => 'Actions'],
             ['type' => 'CheckBox', 'name' => 'fallbackEnabled', 'caption' => self::t('Fallback Actions'), 'visible' => ProLoader::has('limiter'),
@@ -960,7 +960,6 @@ class FormBuilder
                         ['caption' => self::t('Seconds'), 'value' => 1], ['caption' => self::t('Minutes'), 'value' => 60], ['caption' => self::t('Hours'), 'value' => 3600],
                     ]],
                     ['type' => 'CheckBox', 'name' => 'heatupResetOnInterruption', 'caption' => self::t('Reset on interruption')],
-                    ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('Timer')],
                 ]],
                 ['type' => 'RowLayout', 'items' => [
                     ['type' => 'NumberSpinner', 'name' => 'cooldownSeconds', 'caption' => self::t('Cooldown'), 'minimum' => 0],
@@ -969,6 +968,7 @@ class FormBuilder
                     ]],
                     ['type' => 'CheckBox', 'name' => 'cooldownResetOnReactivation', 'caption' => self::t('Reset on reactivation')],
                 ]],
+                ['type' => 'CheckBox', 'name' => 'timerEnabled', 'caption' => self::t('End heatup and cooldown automatically')],
             ]],
             ['type' => 'ValidationTextBox', 'name' => 'formula', 'caption' => 'Formula',
                 'validate' => '^.+$',

@@ -110,7 +110,7 @@
             "Variable does not exist": "Variable existiert nicht",
             "Reset on interruption": "Bei Unterbrechung zurücksetzen",
             "Reset on reactivation": "Bei Re-Aktivierung zurücksetzen",
-            "Timer": "Timer",
+            "End heatup and cooldown automatically": "Vorlauf und Nachlauf automatisch beenden",
             "running": "läuft",
             "remaining": "noch",
             "Fallback Actions": "Fallback-Aktionen aktivieren",
