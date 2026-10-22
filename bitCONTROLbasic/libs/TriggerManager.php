@@ -112,7 +112,7 @@ class TriggerManager
 
         $now = time();
         if ($timestamp <= $now) {
-            // Verpasster Ablauf: nur einmal nachholen, nie erneut scharf schalten.
+            // Missed expiry: catch up once only, never arm it again.
             if ((int)($event['LastRun'] ?? 0) >= $timestamp) {
                 if ($active) {
                     IPS_SetEventActive($eventID, false);

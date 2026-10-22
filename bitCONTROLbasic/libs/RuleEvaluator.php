@@ -39,7 +39,7 @@ class RuleEvaluator
                     continue;
                 }
 
-                // Timing-Pass: nur der Moment des Vorlauf-Ablaufs darf schalten.
+                // Timing pass: only the moment the heat-up expires may switch.
                 $shouldExecute = !$timingOnly || $heatupStatus === 'elapsed';
 
                 if ($shouldExecute) {
@@ -55,10 +55,10 @@ class RuleEvaluator
                     $this->timing->markActive($stateKey, $cooldownReset);
                     $this->timing->markLastRun($stateKey);
                 } else {
-                    // Timing-Pass ohne Ablauf: keine Aktionen, kein markLastRun — aber die
-                    // Buchhaltung muss mitlaufen. Sonst behält eine Regel, deren Bedingung
-                    // ohne Trigger wieder wahr wird (z. B. Zeitfenster), ihren alten
-                    // CooldownStart_ und die nächste Abschaltung gilt sofort als abgelaufen.
+                    // Timing pass without an expiry: no actions, no markLastRun — but the
+                    // bookkeeping must still run. Otherwise a rule whose condition becomes
+                    // true again without a trigger (e.g. a time window) keeps its stale
+                    // CooldownStart_ and the next switch-off counts as expired at once.
                     $this->timing->markActive($stateKey, $cooldownReset);
                 }
 
@@ -85,7 +85,7 @@ class RuleEvaluator
                 }
 
                 $this->timing->markInactive($stateKey);
-                // Timing-Pass: nur der Moment des Nachlauf-Ablaufs darf abschalten.
+                // Timing pass: only the moment the cooldown expires may switch off.
                 $shouldFallback = !$timingOnly || $cooldownStatus === 'elapsed';
                 if ($shouldFallback && $fallbackEnabled && $this->executeFallbackActions($rule)) {
                     if ($isFirstMatch) {
@@ -100,10 +100,10 @@ class RuleEvaluator
     }
 
     /**
-     * Die eine Rangfolge der Regel-State-Keys: aktive Regeln, nach `position` sortiert,
-     * 0-basierter Rang. Jeder Ort, der State-Keys braucht (evaluate(), FormBuilder-Anzeige,
-     * Prune in module.php), muss diese Liste benutzen — sonst prunt ApplyChanges Keys,
-     * die die Auswertung gerade benutzt.
+     * The one ranking of the rule state keys: active rules, sorted by `position`,
+     * 0-based rank. Every place that needs state keys (evaluate(), the FormBuilder
+     * display, the prune in module.php) must use this list — otherwise ApplyChanges
+     * prunes keys the evaluation is using.
      *
      * @return list<array{key: string, rule: array}>
      */

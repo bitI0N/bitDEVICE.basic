@@ -240,9 +240,9 @@ class bitCONTROL extends IPSModuleStrict
     }
 
     /**
-     * Ein Timer-Event und ein Trigger können auf derselben Sekunde feuern. Die
-     * Elapsed-Latches in TimingEvaluator sind Read-Modify-Write auf demselben
-     * State-Attribut, deshalb wird eine Auswertung pro Instanz serialisiert.
+     * A timer event and a trigger can fire in the same second. The elapsed
+     * latches in TimingEvaluator are read-modify-write on the same state
+     * attribute, so evaluation is serialized per instance.
      */
     private function runEvaluation(bool $timingOnly): bool
     {
@@ -285,8 +285,8 @@ class bitCONTROL extends IPSModuleStrict
         }
         $this->SendDebug($timingOnly ? 'EvaluateTiming' : 'Evaluate', $result ?? 'no result', 0);
 
-        // Der Zeitplan wird aus dem State abgeleitet, nicht aus dem Auswertungslauf:
-        // erst nach der Auswertung steht fest, welche Phase gerade läuft.
+        // The schedule is derived from the state, not from the evaluation run:
+        // only after the evaluation is it settled which phase is running.
         $this->syncTimers($mode);
 
         return true;
@@ -308,9 +308,9 @@ class bitCONTROL extends IPSModuleStrict
         $schedule = [];
 
         $add = function (array $entry, string $name, string $stateKey) use (&$schedule, $state, $now): void {
-            // Namenskollision: der erste Eintrag gewinnt. Im Regel-Modus verhindert der
-            // Duplikat-Guard (Status 205) sie ohnehin; im Combined-Modus teilen sich doppelte
-            // oder leere Namen denselben State-Key und damit ein Event (Verhalten wie bisher).
+            // Name collision: the first entry wins. In rule mode the duplicate guard
+            // (status 205) prevents it anyway; in combined mode duplicate or empty
+            // names share one state key and therefore one event (unchanged behavior).
             if (array_key_exists($name, $schedule)) {
                 return;
             }
@@ -331,7 +331,7 @@ class bitCONTROL extends IPSModuleStrict
         }
 
         if ($mode === 3) {
-            // Combined wertet jede Regel einzeln aus → ihr State-Key ist immer Rang 0.
+            // Combined evaluates every rule on its own → its state key is always rank 0.
             foreach ($rules as $rule) {
                 if (empty($rule['active']) || empty($rule['timerEnabled'])) {
                     continue;
@@ -342,8 +342,8 @@ class bitCONTROL extends IPSModuleStrict
 
         if ($mode === 1 || $mode === 3) {
             foreach ($formulaOutputs as $output) {
-                // Dieselbe Vorauswahl wie runFormulaEvaluator(): was nie ausgewertet
-                // wird, kann seinen eigenen State auch nie wieder abräumen.
+                // The same preselection as runFormulaEvaluator(): what is never
+                // evaluated can never clear its own state either.
                 if (empty($output['active']) || ($output['formula'] ?? '') === '' || ($output['variableID'] ?? 0) === 0) {
                     continue;
                 }
@@ -555,9 +555,9 @@ class bitCONTROL extends IPSModuleStrict
                 }
 
                 if ($timingOnly && $heatupStatus !== 'elapsed') {
-                    // Poll: nur der Vorlauf-Ablauf schreibt; die Formel bleibt sonst unangetastet.
-                    // Die Nachlauf-Buchhaltung läuft trotzdem mit, sonst bleibt ein alter
-                    // CooldownStart_ stehen und die nächste Abschaltung hält gar nicht.
+                    // Poll: only the heat-up expiry writes; otherwise the formula stays untouched.
+                    // The cooldown bookkeeping still runs, otherwise a stale CooldownStart_
+                    // remains and the next switch-off does not hold at all.
                     $timing->markActive($stateKey, $cooldownReset);
                     if ($isFirstMatch) {
                         break;
@@ -1319,7 +1319,7 @@ class bitCONTROL extends IPSModuleStrict
         if ($mode === 3) {
             $rules = json_decode($this->ReadPropertyString('Rules'), true) ?: [];
             $formulaOutputs = json_decode($this->ReadPropertyString('FormulaOutputs'), true) ?: [];
-            // Combined wertet jede Regel einzeln aus → ihr Key ist immer Rang 0.
+            // Combined evaluates every rule on its own → its key is always rank 0.
             $validKeys = array_merge(
                 array_map(static fn ($r) => RuleEvaluator::ruleKey($r, 0), $rules),
                 array_map(fn ($o) => $this->formulaStateKey($o), $formulaOutputs)
@@ -1376,8 +1376,8 @@ class bitCONTROL extends IPSModuleStrict
         };
         $state = json_decode($this->ReadAttributeString($attribute), true) ?: [];
         if ((int)($state[$key] ?? 0) === $value) {
-            // Der Timing-Pass schreibt pro Poll unverändertes markInactive/markActive;
-            // ohne diese Schranke würde jedes Mal das ganze Attribut neu serialisiert.
+            // The timing pass writes an unchanged markInactive/markActive on every poll;
+            // without this guard the whole attribute would be serialized again each time.
             return;
         }
         $state[$key] = $value;
