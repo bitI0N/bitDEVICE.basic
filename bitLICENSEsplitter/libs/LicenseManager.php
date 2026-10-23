@@ -641,13 +641,13 @@ class LicenseManager
      * module.json is specified as id/name/type/vendor/aliases/url/
      * parentRequirements/childRequirements/implemented/prefix and nothing else.
      * The `?? '0.0.0'` therefore fired on every installation, and 0.0.0 is what
-     * every activation recorded and every expired licence locked to. The
+     * every activation recorded and every expired license locked to. The
      * version lives in library.json, one level above the module directory —
      * dataPath is <library>/<module>/data, hence dirname(..., 2).
      *
      * Returns '' when it cannot be determined. Not '0.0.0': an unreadable
      * manifest must not be indistinguishable from a genuine release, which is
-     * exactly how this went unnoticed. The server already normalises a missing
+     * exactly how this went unnoticed. The server already normalizes a missing
      * module_version to ''.
      */
     private function getModuleVersion(): string

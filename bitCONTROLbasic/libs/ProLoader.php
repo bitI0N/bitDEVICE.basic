@@ -37,7 +37,7 @@ class ProLoader
     }
 
     /**
-     * The Symcon licence this installation runs under.
+     * The Symcon license this installation runs under.
      *
      * Read here rather than passed in: an injectable licensee would re-create
      * the overridable-identity seam that spec §2 removed (finding B).

@@ -37,7 +37,7 @@ final class EntitlementGate
     {
         $proDir = $dataPath . '/pro';
 
-        // 0. Nothing installed, nothing to authorise.
+        // 0. Nothing installed, nothing to authorize.
         if (!is_file($proDir . '/manifest.php')) {
             return false;
         }
@@ -58,7 +58,7 @@ final class EntitlementGate
 
         // 2. Not past expiry plus grace. Deliberately a superset of
         //    active+grace so this path and the splitter's cannot disagree
-        //    about an expired licence.
+        //    about an expired license.
         if (!self::withinTerm($payload)) {
             return false;
         }

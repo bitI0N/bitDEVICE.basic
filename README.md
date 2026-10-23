@@ -174,7 +174,7 @@ graph TD
 - **Green row** — configuration valid
 - **Orange row** — no variable selected
 - **Red row** — alias error or formula error
-- **Grey row** — inactive
+- **Gray row** — inactive
 
 ### Status Codes
 

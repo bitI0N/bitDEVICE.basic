@@ -6,7 +6,7 @@ declare(strict_types=1);
  * RS256 token verification against keys pinned in this file.
  *
  * The key used to be read from bitLICENSEsplitter/libs/keys/<kid>.pub, which
- * made forging a licence a matter of overwriting one file — no reverse
+ * made forging a license a matter of overwriting one file — no reverse
  * engineering needed, reproduced against the production LicenseManager
  * (finding C). Pinning removes the file, and with it the substitution vector.
  *
@@ -77,7 +77,7 @@ final class TokenVerifier
      * Verify an RS256 JWT and return its payload, or null on any failure.
      *
      * @param string|null $expectedSub When set, a token whose `sub` differs is
-     *                                 rejected — this binds a licence to the
+     *                                 rejected — this binds a license to the
      *                                 Symcon instance it was issued for.
      * @return array<string, mixed>|null
      */
