@@ -555,9 +555,9 @@ class bitCONTROL extends IPSModuleStrict
                 }
 
                 if ($timingOnly && $heatupStatus !== 'elapsed') {
-                    // Poll: only the heat-up expiry writes; otherwise the formula stays untouched.
-                    // The cooldown bookkeeping still runs, otherwise a stale CooldownStart_
-                    // remains and the next switch-off does not hold at all.
+                    // Poll: only the heatup expiry writes; otherwise the formula stays untouched.
+                    // The cooldown bookkeeping still runs; otherwise a stale CooldownStart_
+                    // remains and the next switch-off is not delayed at all.
                     $timing->markActive($stateKey, $cooldownReset);
                     if ($isFirstMatch) {
                         break;

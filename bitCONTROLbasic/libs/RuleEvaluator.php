@@ -39,7 +39,7 @@ class RuleEvaluator
                     continue;
                 }
 
-                // Timing pass: only the moment the heat-up expires may switch.
+                // Timing pass: only the moment the heatup expires may switch.
                 $shouldExecute = !$timingOnly || $heatupStatus === 'elapsed';
 
                 if ($shouldExecute) {
