@@ -6,6 +6,9 @@ class TriggerManager
 {
     private const EVENT_PREFIX = 'BIT_';
     private const TIMING_EVENT_PREFIX = self::EVENT_PREFIX . 'Timing_';
+    // Seconds addressableBySymcon() looks back for a transition: longer than any repeated
+    // wall-clock period, shorter than the time between two transitions.
+    private const TRANSITION_LOOKBACK = 86400;
     private int $instanceID;
 
     public function __construct(int $instanceID)
@@ -37,9 +40,10 @@ class TriggerManager
      * switched off. Without that check every evaluation would re-arm the same past expiry
      * and the event would loop every two seconds.
      *
-     * A phase end that falls into the repeated hour of a DST fall-back is ambiguous as a local
-     * wall clock time; it is shifted by one hour so the programmed components address the
-     * intended instant instead of the earlier one (see applyTimingSchedule()).
+     * A phase end in the repeated hour of a DST fall-back is ambiguous as a local wall clock
+     * time, and Symcon resolves it to the first pass. An end in the first pass is programmed
+     * as it is; one in the second pass is moved one hour later, so the event never fires early
+     * and fires exactly once (see addressableBySymcon()).
      *
      * @param array<string, ?int> $schedule eventName => unix timestamp of the next
      *                                       occurrence, or null to deactivate.
@@ -122,28 +126,14 @@ class TriggerManager
             $timestamp = $now + 2;
         }
 
+        $timestamp = $this->addressableBySymcon($timestamp);
+
         $day    = (int)date('j', $timestamp);
         $month  = (int)date('n', $timestamp);
         $year   = (int)date('Y', $timestamp);
         $hour   = (int)date('G', $timestamp);
         $minute = (int)date('i', $timestamp);
         $second = (int)date('s', $timestamp);
-
-        // DST fall-back: in the repeated hour the local time is ambiguous and mktime() resolves
-        // it to the earlier instant. Symcon programs the event from exactly these components, so
-        // it would fire an hour too early. Shifting the expiry once by that difference makes the
-        // wall clock unambiguous again: the phase end fires up to an hour late, but exactly once.
-        // The shifted timestamp round-trips, so this can never loop.
-        $roundTrip = mktime($hour, $minute, $second, $month, $day, $year);
-        if ($roundTrip !== $timestamp) {
-            $timestamp += ($timestamp - $roundTrip);
-            $day    = (int)date('j', $timestamp);
-            $month  = (int)date('n', $timestamp);
-            $year   = (int)date('Y', $timestamp);
-            $hour   = (int)date('G', $timestamp);
-            $minute = (int)date('i', $timestamp);
-            $second = (int)date('s', $timestamp);
-        }
 
         $dateFrom = $event['CyclicDateFrom'] ?? [];
         $timeFrom = $event['CyclicTimeFrom'] ?? [];
@@ -164,6 +154,38 @@ class TriggerManager
         IPS_SetEventCyclicDateFrom($eventID, $day, $month, $year);
         IPS_SetEventCyclicTimeFrom($eventID, $hour, $minute, $second);
         IPS_SetEventActive($eventID, true);
+    }
+
+    /**
+     * The instant to program so that Symcon fires at $timestamp or at most one repeated period
+     * later, never earlier.
+     *
+     * Symcon programs the event from local wall-clock components. At a DST fall-back the wall
+     * clock of the period after the transition repeats the period before it, and Symcon
+     * resolves such components to the first pass (probed against Symcon 9.0: NextRun of a
+     * one-shot event at 02:10 on a fall-back day is 02:10 CEST). An instant in the first pass
+     * is therefore addressed exactly. One in the second pass would fire a whole period early;
+     * it is moved by that period, out of the repeated wall clock, and fires that much late.
+     *
+     * Decided from the zone's transitions, not by a mktime() round trip: how mktime() resolves
+     * a repeated wall clock depends on the PHP build and its time zone data, and Symcon's own
+     * PHP resolves it the other way round than Symcon does.
+     */
+    private function addressableBySymcon(int $timestamp): int
+    {
+        $zone = new DateTimeZone(date_default_timezone_get());
+        // [0] is the state at the start of the lookback, every further entry a transition up to $timestamp.
+        $transitions = $zone->getTransitions($timestamp - self::TRANSITION_LOOKBACK, $timestamp);
+        if (count($transitions) < 2) {
+            return $timestamp;
+        }
+
+        $last = $transitions[count($transitions) - 1];
+        $repeated = $transitions[count($transitions) - 2]['offset'] - $last['offset'];
+
+        // A spring-forward makes $repeated negative and never matches. A moved instant lies
+        // behind the repeated period, so a second pass leaves it unchanged.
+        return $timestamp < $last['ts'] + $repeated ? $timestamp + $repeated : $timestamp;
     }
 
     public function buildAliasMap(array $triggers): array
