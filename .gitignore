@@ -101,7 +101,7 @@ BenchmarkDotNet.Artifacts/
 ### LINT
 StyleCopReport.xml
 ### PHP
-/vendor/
+/vendor/*
 !/vendor/legion
 /vendor/bithome/vendor/
 !/vendor/bithome
