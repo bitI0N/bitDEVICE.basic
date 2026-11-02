@@ -1,27 +1,57 @@
 # BITION
+/vendor/*
+!/vendor/legion
+!/vendor/genome
+!/vendor/bithome
+!/vendor/bitdevice
+!/vendor/bithorizon
+!/vendor/bitlicense
+!/vendor/hermes
+!/vendor/paperclip
+/vendor/*/vendor/
 
-## SYSTEM 
+## SYSTEM
 ### APPLE
-*.DS_Store
 ._*
+*.DS_Store
+*.[Tt]rashes
+*.[Ss]potlight-V100
 ### WINDOWS
-Thumbs.db
+*RECYCLE.BIN
+[Tt]humbs.db
+[Dd]esktop.ini
+### EDITOR
+.history/
+*.sw[po]
+*~
 
 ## USER
 *.rsuser
 *.suo
 *.user
-*.userosscache
-*.sln.docstates
 *.userprefs
+*.userosscache
 
 ## ENVIRONMENT
 ### VSCODE
-.vs
-.vscode
-.idea
-Generated\ Files/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.vs/*
+.idea/*
 ### AGENTS
+.bition/*
+!.bition/config
+# The shared tooling of the agent master (bitAGENT)
+!.bition/githooks
+!.bition/hooks
+!.bition/scripts
+# Multi-agent links (init-agents.sh): keep them committable
+!.bition/capabilities
+!.bition/agents
+!.bition/skills
+/.legion-backup/
 .agents/*
 !.agents/agents
 !.agents/skills
@@ -33,6 +63,7 @@ Generated\ Files/
 !.claude/agents
 !.claude/skills
 !.claude/hooks
+!.claude/scripts
 !.claude/CLAUDE.md
 !.claude/settings.json
 ### CODEX
@@ -40,94 +71,146 @@ Generated\ Files/
 !.codex/agents
 !.codex/skills
 !.codex/hooks
+!.codex/AGENTS.md
 !.codex/config.toml
 !.codex/hooks.json
-!.codex/AGENTS.md
-!.codex/settings.json
+### GEMINI
+.gemini/*
+!.gemini/agents
+!.gemini/skills
+!.gemini/hooks
+!.gemini/GEMINI.md
+!.gemini/hooks.json
+!.gemini/settings.json
+
+## DEVELOPMENT
+### CONFIG
+.env*.local
+.env.local.*
+!.env*.template
+!.env*.dist
+!.env*.example
+*settings*.local.json
+*compose*.override.y*ml
+### SECRETS
+/auth.json
+*.pem
+*.key
+*.p12
+*.pfx
+# Deliberately public test material, never a production key
+!**/keys/testing.pem
+### BUILD
+/[Ll]og/
+/[Ll]ogs/
+/[Dd]ebug/
+/[Rr]elease/
+/[Rr]eleases/
+/[Dd]ist/
+/[Oo]bj/
+/[Bb]in/*
+!/[Bb]in/console
+# build/ holds tracked packaging configuration; only its products are ignored
+/[Bb]uild/*
+!/[Bb]uild/*.json
+!/[Bb]uild/*.neon
+!/[Bb]uild/*.cnf
+!/[Bb]uild/schema/
+!/[Bb]uild/stubs/
+/tmp/
+.cache/
+*.log
+*.tmp
+### TEST
+/*[-_\.]*[Rr]eport/
+/*[-_\.]*[Oo]utput/
+/*[-_\.]*[Oo]utput.*
+*[-_\.][Rr]esult*/
+[Tt]est[-_\.]*[Rr]esult*/
+[Tt]est[-_\.]*[Rr]esult.xml
+/[Cc]overage*/
+[Bb]uild[Ll]og.*
+[Jj]unit*.xml
+clover*.xml
+cov*.xml
+coverage-*.xml
+/.hypothesis/
+/release-notes/
+### BACKUP
+*.bak
+*.backup
+### SCANNER
+[Dd]ast[-_\.]*[Rr]esult*/
+/[Dd]eptrac-[Oo]utput.*
+/.[Dd]ep[Tt]rac.*
+.scannerwork/
+### TOOLS
 .superpowers
 .playwright*
 .taskkey
+*.phar
+### PHP
+.php*cache
+infection.log
+/composer-*.json
+/composer-*.txt
+### PYTHON
+.*_cache/
+__pycache__/
+*.pyc
+.venv/
+### NODE
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+.npm/
+.pnpm-store/
+.yarn/*
+!.yarn/[prsv]*
+.pnp.*
+*.tsbuildinfo
+.*lintcache
+.vite/
+.parcel-cache/
+.turbo/
+.n?xt/
+.svelte-kit/
+/out/
+### TERRAFORM
+.terraform/
+.terraformrc
+terraform.rc
+*.tfstate*
+*.tfvars*
+*override.tf*
+### HELM
+**/charts/*.tgz
+### SYMFONY
+/var/*
+!/var/.gitkeep
+/public/bundles/
+/public/build/
+/public/assets/
+/assets/vendor/
+/config/reference.php
+
+## PROJECT
 ### PAPERCLIP
 data/paperclip/postgres/
 data/paperclip/home/
-# data/paperclip/backup/ is tracked (DB dumps for cross-machine sync)
 ### SYMCON
 .workspace
 .libraries
 .mock
-
-## DEVELOPMENT
-### BUILD
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-!/bin/
-!/bin/console
-[Oo]bj/
-[Ll]og/
-[Ll]ogs/
-### CONFIG
-.env.local
-.env.local.php
-.env.*.local
-### TEST
-[Tt]est[-_\.]*[Rr]esult*/
-### CI SCAN OUTPUT (produced by pipelines/scripts, published as artifacts)
-.scannerwork/
-infection.phar
-# build/ itself is tracked (config.json, yakpro-po.cnf, stubs) — only the
-# generated tier packages are not.
-build/dist/
-dast-results/
-load-test-results/
-container-security-results/
-build/verify-status/
-[Bb]uild[Ll]og.*
-*.VisualState.xml
-TestResult.xml
-nunit-*.xml
-### BACKUP
-*.bak
-*.backup
-### BENCHMARK
-BenchmarkDotNet.Artifacts/
-### LINT
-StyleCopReport.xml
-### PHP
-/vendor/*
-!/vendor/legion
-/vendor/bithome/vendor/
-!/vendor/bithome
-/vendor/bithome/vendor/
-.phpunit.result.cache
-.phpunit.cache/
-coverage-*.xml
-cov-*.xml
-# The exact name the local coverage command in .wiki/pipeline/AGENTS.md writes.
-cov.xml
-# JUnit reports the integration/abuse runners write to the project root for ADO.
-junit-*.xml
-# E2E signing keypair, generated per run by e2e/trust-test-key.sh. A private key
-# in the repository would be an entitlement backdoor, not a fixture.
-build/e2e-signing.pem
-build/e2e-signing.pem.pub
-### PYTHON
-__pycache__/
-*.pyc
-### SYMFONY
-/var/
-/config/reference.php
-# Multi-Agent-Symlinks (init-agents.sh) — committebar halten
-!.claude/scripts
-
-### PHP-CS-Fixer local cache
-.php-cs-fixer.cache
-build/.e2e-server-key.pub
-build/symcon-license/
+### MOCK (generated scenarios stay out, see mock/README.md)
+mock/*
+!mock/README.md
+!mock/empty/
+!mock/generator/
+!mock/profiles/
+!mock/query.js
+!mock/record.js
+!mock/standard/
+!mock/ui/
+!mock/under-pressure/
